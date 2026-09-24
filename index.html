@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Grid</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client"></script>
+</head>
+<body>
+
+  <!-- ============ Login Screen (shown when not signed in) ============ -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-icon">📋</div>
+      <h1>Task Grid</h1>
+      <p>Plan your tasks and sync them with Google Calendar &amp; Drive.</p>
+      <button class="primary login-btn" id="loginBtn">Sign in with Google</button>
+      <p class="login-note">Your data is stored privately in your Google Drive.</p>
+    </div>
+  </div>
+
+  <!-- ============ Main App (shown when signed in) ============ -->
+  <div id="appContainer" style="display:none;">
+    <h1>📋 Task Grid</h1>
+    <div class="toolbar">
+      <button class="primary" id="addTaskBtn">+ Add Task</button>
+      <button id="prevWeekBtn">← Prev week</button>
+      <button id="todayBtn">Today</button>
+      <button id="nextWeekBtn">Next week →</button>
+      <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
+        <input type="checkbox" id="showCompleted"> Show completed
+      </label>
+      <span class="sync-badge" id="syncBadge">● Not synced</span>
+      <span class="auth-status connected" id="authStatus" style="margin-left:auto;">
+        Signed in ✓
+      </span>
+      <button id="authBtn">Sign out</button>
+    </div>
+
+    <div class="sync-warning" id="syncWarning" style="display:none;">
+      ⚠️ <span id="syncWarningText"></span>
+    </div>
+
+    <div class="grid-wrap" id="gridWrap"></div>
+  </div>
+
+  <!-- ============ Add/Edit Task Modal ============ -->
+  <div class="modal-backdrop" id="taskModalBackdrop">
+    <div class="modal">
+      <h2 id="taskModalTitle">Add Task</h2>
+      <label>Task name</label>
+      <input type="text" id="taskName" placeholder="e.g. Apply for Pomona">
+      <label>Subtasks</label>
+      <div class="hint">Due date = ✕ on the grid. Est. hours = time to schedule.</div>
+      <div id="subtaskList"></div>
+      <button style="margin-top:10px" id="addSubtaskBtn">+ Add subtask</button>
+      <div class="modal-actions">
+        <button id="taskCancelBtn">Cancel</button>
+        <button class="primary" id="taskSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Full-screen Calendar Scheduler ============ -->
+  <div class="cal-overlay" id="calOverlay">
+    <div class="cal-header">
+      <div class="cal-title" id="calTitle">Schedule Time</div>
+      <div class="cal-counter" id="calCounter"></div>
+      <div class="cal-nav">
+        <button id="calPrevWeek">← Prev</button>
+        <button id="calThisWeek">This week</button>
+        <button id="calNextWeek">Next →</button>
+      </div>
+      <div class="cal-actions">
+        <button id="calCancel">Cancel</button>
+        <button class="green" id="calPush">Push to Google Calendar</button>
+      </div>
+    </div>
+    <div class="cal-grid-wrap" id="calGridWrap"></div>
+  </div>
+
+  <!-- ============ Event Deletion Choice Dialog ============ -->
+  <div class="modal-backdrop" id="delDialogBackdrop">
+    <div class="modal" style="width:min(420px,92vw)">
+      <h2 id="delDialogTitle">Delete</h2>
+      <p id="delDialogMsg" style="color:var(--muted);font-size:14px;margin:0 0 8px;"></p>
+      <div id="delDialogOptions" style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+        <button id="delFuture">Delete future calendar events only</button>
+        <button id="delAll">Delete ALL calendar events</button>
+        <button id="delNone">Keep all calendar events</button>
+        <button id="delCancel" style="margin-top:4px;color:var(--muted);">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ App entry point ============ -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
