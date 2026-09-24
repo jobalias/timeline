@@ -47,7 +47,7 @@ export class GoogleCalendar {
   }
 
   _onTokenReceived(resp) {
-    // resp has access_token + expires_in (seconds)
+    console.log('Granted scopes:', resp.scope); // ← add this line
     const expiresAt = Date.now() + (resp.expires_in - 60) * 1000; // 60s safety margin
     const tokenData = { access_token: resp.access_token, expiresAt };
     localStorage.setItem(TOKEN_KEY, JSON.stringify(tokenData));
@@ -120,23 +120,44 @@ export class GoogleCalendar {
     this.onAuthChange(false);
   }
 
-  async getEvents(timeMin, timeMax) {
-    const resp = await gapi.client.calendar.events.list({
-      calendarId: 'primary',
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults: 250,
-    });
-    return (resp.result.items || [])
-      .filter((e) => e.start && e.start.dateTime)
-      .map((e) => ({
-        id: e.id,
-        title: e.summary || '(no title)',
-        start: new Date(e.start.dateTime),
-        end: new Date(e.end.dateTime),
-      }));
+  async listCalendars() {
+    const resp = await gapi.client.calendar.calendarList.list();
+    return (resp.result.items || []).map((c) => ({
+      id: c.id,
+      name: c.summary,
+      primary: !!c.primary,
+    }));
+  }
+
+  // Fetch events from one or more calendars, merged into a single array
+  async getEvents(timeMin, timeMax, calendarIds = ['primary']) {
+    const all = [];
+    for (const calId of calendarIds) {
+      try {
+        const resp = await gapi.client.calendar.events.list({
+          calendarId: calId,
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: 250,
+        });
+        (resp.result.items || [])
+          .filter((e) => e.start && e.start.dateTime)
+          .forEach((e) => {
+            all.push({
+              id: e.id,
+              title: e.summary || '(no title)',
+              start: new Date(e.start.dateTime),
+              end: new Date(e.end.dateTime),
+              calendarId: calId,
+            });
+          });
+      } catch (err) {
+        console.warn('Failed to fetch calendar', calId, err);
+      }
+    }
+    return all;
   }
 
   async createEvent({ summary, description, startDate, startTime, hours }) {

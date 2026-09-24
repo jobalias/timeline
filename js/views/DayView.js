@@ -1,9 +1,10 @@
 import { startOfDay, sameDay, parseYmd } from '../utils.js';
 
 export class DayView {
-  constructor(store, googleCalendar) {
+  constructor(store, googleCalendar, settings) {
     this.store = store;
     this.gcal = googleCalendar;
+    this.settings = settings;
     this.currentDay = startOfDay(new Date());
     this.busyEvents = [];
 
@@ -41,7 +42,8 @@ export class DayView {
         const dayStart = startOfDay(this.currentDay);
         const dayEnd = new Date(dayStart);
         dayEnd.setDate(dayEnd.getDate() + 1);
-        this.busyEvents = await this.gcal.getEvents(dayStart, dayEnd);
+        const calIds = this.settings.getSelectedCalendars();
+        this.busyEvents = await this.gcal.getEvents(dayStart, dayEnd, calIds);
       } catch (e) {
         this.busyEvents = [];
       }

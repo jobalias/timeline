@@ -6,6 +6,8 @@ import { TaskModal } from './views/TaskModal.js';
 import { CalendarView } from './views/CalendarView.js';
 import { DeleteDialog } from './views/DeleteDialog.js';
 import { DayView } from './views/DayView.js';
+import { Settings } from './services/Settings.js';
+import { CalendarPicker } from './views/CalendarPicker.js';
 
 class App {
   constructor() {
@@ -13,6 +15,7 @@ class App {
     this.store = new TaskStore();
     this.gcal = new GoogleCalendar();
     this.drive = new GoogleDrive(this.gcal);
+    this.settings = new Settings();
     this.store.attachDrive(this.drive);
     this.dayView = new DayView(this.store, this.gcal);
     // sync status → toolbar
@@ -60,8 +63,14 @@ class App {
     // ---------- Dialogs / Modals / Views ----------
     this.deleteDialog = new DeleteDialog();
 
-    this.calendarView = new CalendarView(this.store, this.gcal, {
+    this.calendarView = new CalendarView(this.store, this.gcal, this.settings, {
       onDone: (finishedContext) => this._advanceScheduling(finishedContext),
+    });
+
+    this.dayView = new DayView(this.store, this.gcal, this.settings);
+
+    this.calendarPicker = new CalendarPicker(this.gcal, this.settings, {
+      onSave: () => this.dayView.render(), // refresh day view with new selection
     });
 
     this.taskModal = new TaskModal(this.store, {

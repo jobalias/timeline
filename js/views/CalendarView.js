@@ -6,9 +6,10 @@ const HOUR_PX = 48;           // pixel height of one hour
 const PX_PER_MIN = HOUR_PX / 60;
 
 export class CalendarView {
-  constructor(store, googleCalendar, { onDone = () => {} } = {}) {
+  constructor(store, googleCalendar, settings, { onDone = () => {} } = {}) {
     this.store = store;
     this.gcal = googleCalendar;
+    this.settings = settings;
     this.onDone = onDone;
     this.context = null;
     this.weekStart = this._mondayOf(new Date());
@@ -70,8 +71,9 @@ export class CalendarView {
     const weekEnd = new Date(this.weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
     try {
+      const calIds = this.settings.getSelectedCalendars();
       this.busyEvents = this.gcal.isAuthed
-        ? await this.gcal.getEvents(this.weekStart, weekEnd)
+        ? await this.gcal.getEvents(this.weekStart, weekEnd, calIds)
         : [];
     } catch (e) {
       console.error(e);

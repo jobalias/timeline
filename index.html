@@ -27,6 +27,7 @@
     <h1>📋 Task Grid</h1>
     <div class="toolbar">
       <button class="primary" id="addTaskBtn">+ Add Task</button>
+      <button id="settingsBtn" title="Settings">⚙️</button>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
         <input type="checkbox" id="showCompleted"> Show completed
       </label>
@@ -73,7 +74,21 @@
       </div>
     </div>
   </div>
-
+  
+  <!-- Calendar Picker -->
+  <div class="modal-backdrop" id="calPickerBackdrop">
+    <div class="modal" style="width:min(380px,92vw)">
+      <h2>Calendars to display</h2>
+      <p style="color:var(--muted);font-size:13px;margin:0 0 12px;">
+        Choose which calendars' events appear as gray busy blocks.
+      </p>
+      <div id="calPickerList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="modal-actions">
+        <button id="calPickerCancel">Cancel</button>
+        <button class="primary" id="calPickerSave">Save</button>
+      </div>
+    </div>
+  </div>
   <!-- ============ Full-screen Calendar Scheduler ============ -->
   <div class="cal-overlay" id="calOverlay">
     <div class="cal-header">

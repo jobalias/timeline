@@ -5,6 +5,7 @@ export const API_KEY = 'AIzaSyDoUW_TbSyolodDo8hHmKUidjqDakvs1Co';
 
 export const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/drive.appdata',
 ].join(' ');
 
