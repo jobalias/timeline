@@ -5,6 +5,7 @@ import { GridView } from './views/GridView.js';
 import { TaskModal } from './views/TaskModal.js';
 import { CalendarView } from './views/CalendarView.js';
 import { DeleteDialog } from './views/DeleteDialog.js';
+import { DayView } from './views/DayView.js';
 
 class App {
   constructor() {
@@ -13,7 +14,7 @@ class App {
     this.gcal = new GoogleCalendar();
     this.drive = new GoogleDrive(this.gcal);
     this.store.attachDrive(this.drive);
-
+    this.dayView = new DayView(this.store, this.gcal);
     // sync status → toolbar
     const syncEl = document.getElementById('syncStatus');
 // sync status → badge + warning banner
@@ -87,7 +88,10 @@ class App {
     this._bindLogin();
 
     // re-render grid whenever data changes
-    this.store.subscribe(() => this.grid.render());
+    this.store.subscribe(() => {
+      this.grid.render();
+      this.dayView.render();
+    });
 
     // start Google (will auto-restore session if a token is saved)
     this.gcal.init();
@@ -118,6 +122,7 @@ class App {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContainer').style.display = 'block';
     this.grid.render();
+    this.dayView.render();
   }
 
   _showLogin() {
@@ -129,12 +134,6 @@ class App {
   _bindToolbar() {
     document.getElementById('addTaskBtn')
       .addEventListener('click', () => this.taskModal.openNew());
-    document.getElementById('prevWeekBtn')
-      .addEventListener('click', () => this.grid.shiftWindow(-7));
-    document.getElementById('todayBtn')
-      .addEventListener('click', () => this.grid.jumpToday());
-    document.getElementById('nextWeekBtn')
-      .addEventListener('click', () => this.grid.shiftWindow(7));
   }
 
   // ==================== Task deletion ====================

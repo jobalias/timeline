@@ -27,9 +27,6 @@
     <h1>📋 Task Grid</h1>
     <div class="toolbar">
       <button class="primary" id="addTaskBtn">+ Add Task</button>
-      <button id="prevWeekBtn">← Prev week</button>
-      <button id="todayBtn">Today</button>
-      <button id="nextWeekBtn">Next week →</button>
       <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
         <input type="checkbox" id="showCompleted"> Show completed
       </label>
@@ -44,7 +41,20 @@
       ⚠️ <span id="syncWarningText"></span>
     </div>
 
-    <div class="grid-wrap" id="gridWrap"></div>
+    <!-- Split: grid (left) + day view (right) -->
+    <div class="main-split">
+      <div class="grid-wrap" id="gridWrap"></div>
+
+      <div class="day-view" id="dayView">
+        <div class="day-view-header">
+          <button id="dayPrev">←</button>
+          <div class="day-view-title" id="dayViewTitle">Today</div>
+          <button id="dayNext">→</button>
+        </div>
+        <button class="day-today-btn" id="dayToday">Jump to today</button>
+        <div class="day-view-body" id="dayViewBody"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ============ Add/Edit Task Modal ============ -->
