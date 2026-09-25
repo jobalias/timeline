@@ -47,7 +47,6 @@ export class GoogleCalendar {
   }
 
   _onTokenReceived(resp) {
-    console.log('Granted scopes:', resp.scope); // ← add this line
     const expiresAt = Date.now() + (resp.expires_in - 60) * 1000; // 60s safety margin
     const tokenData = { access_token: resp.access_token, expiresAt };
     localStorage.setItem(TOKEN_KEY, JSON.stringify(tokenData));
@@ -128,6 +127,24 @@ export class GoogleCalendar {
     }
   }
   
+  async updateEvent({ eventId, summary, startDate, startTime, hours }) {
+    const [h, m] = startTime.split(':').map(Number);
+    const startDt = new Date(startDate + 'T00:00:00');
+    startDt.setHours(h, m, 0, 0);
+    const endDt = new Date(startDt.getTime() + parseFloat(hours) * 3600 * 1000);
+
+    const resp = await gapi.client.calendar.events.patch({
+      calendarId: 'primary',
+      eventId,
+      resource: {
+        summary,
+        start: { dateTime: startDt.toISOString() },
+        end: { dateTime: endDt.toISOString() },
+      },
+    });
+    return resp.result.id;
+  }
+
   _signOut() {
     const token = gapi.client.getToken();
     if (token) {

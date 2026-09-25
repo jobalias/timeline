@@ -42,7 +42,7 @@ export class CalendarView {
        <span class="cal-sub">▸ ${this._esc(st.name)}${est}</span>`;
 
     this.blocks = st.blocks.map((b) => new TimeBlock(b));
-    this.weekStart = this._mondayOf(new Date());
+    this._originalEventIds = st.blocks.map((b) => b.eventId).filter(Boolean);    this.weekStart = this._mondayOf(new Date());
     this.overlay.classList.add('open');
     await this._loadAndRender();
     this._scrollToHour(8);
@@ -299,27 +299,41 @@ export class CalendarView {
   // ---------- push ----------
   async _push() {
     if (!this.gcal.isAuthed) { alert('Please connect Google first.'); return; }
-    if (this.blocks.length === 0) { alert('Place at least one block.'); return; }
 
     const task = this.store.find(this.context.taskId);
     const st = task.subtasks[this.context.subIndex];
     const btn = document.getElementById('calPush');
-    btn.disabled = true; btn.textContent = 'Creating…';
+    btn.disabled = true; btn.textContent = 'Saving…';
 
     try {
+      // create or update each block
       for (const b of this.blocks) {
-        // Skip blocks that already have an event (avoid duplicates)
-        if (b.eventId) continue;
-        const eventId = await this.gcal.createEvent({
-          summary: `${task.name}: ${st.name}`,
-          startDate: b.date, startTime: b.start, hours: b.hours,
-        });
-        b.eventId = eventId; // store it on the block
+        if (b.eventId) {
+          await this.gcal.updateEvent({
+            eventId: b.eventId,
+            summary: `${task.name}: ${st.name}`,
+            startDate: b.date, startTime: b.start, hours: b.hours,
+          });
+        } else {
+          const eventId = await this.gcal.createEvent({
+            summary: `${task.name}: ${st.name}`,
+            startDate: b.date, startTime: b.start, hours: b.hours,
+          });
+          b.eventId = eventId;
+        }
       }
-      // save now that blocks have event IDs
+
+      // delete events for blocks removed in the editor
+      const currentIds = this.blocks.map((b) => b.eventId).filter(Boolean);
+      const removedIds = (this._originalEventIds || [])
+        .filter((id) => !currentIds.includes(id));
+      for (const id of removedIds) {
+        await this.gcal.deleteEvent(id);
+      }
+
       this.store.setSubtaskBlocks(this.context.taskId, this.context.subIndex, this.blocks);
 
-      btn.textContent = '✓ Added';
+      btn.textContent = '✓ Saved';
       setTimeout(() => {
         btn.disabled = false;
         btn.textContent = 'Push to Google Calendar';
