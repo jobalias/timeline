@@ -120,9 +120,10 @@ class App {
       if (connected) {
         this._showApp();
         await this.store.loadFromDrive();
+        await this._reconcile();       // ← sync with calendar after loading
       } else {
         this._showLogin();
-        document.getElementById('syncStatus').textContent = '';
+        document.getElementById('syncBadge').textContent = '';
       }
     };
   }
@@ -143,6 +144,28 @@ class App {
   _bindToolbar() {
     document.getElementById('addTaskBtn')
       .addEventListener('click', () => this.taskModal.openNew());
+    document.getElementById('refreshBtn')
+      .addEventListener('click', () => this._reconcile());
+  }
+
+  async _reconcile() {
+    const btn = document.getElementById('refreshBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '🔄 Syncing…'; }
+
+    try {
+      const changed = await this.store.reconcileWithCalendar(this.gcal);
+      // always refresh the day view (it shows live calendar state)
+      await this.dayView.render();
+      this.grid.render();
+      if (btn) btn.textContent = changed ? '🔄 Updated!' : '🔄 Up to date';
+    } catch (e) {
+      console.error('Reconcile failed:', e);
+      if (btn) btn.textContent = '🔄 Refresh';
+    } finally {
+      setTimeout(() => {
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh'; }
+      }, 1500);
+    }
   }
 
   // ==================== Task deletion ====================

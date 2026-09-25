@@ -20,6 +20,72 @@ export class TaskStore {
     this.syncStatusFn = fn;
   }
 
+  // Check all incomplete subtasks' blocks against Google Calendar.
+  // Removes deleted events, updates moved/resized ones.
+  async reconcileWithCalendar(googleCalendar) {
+    if (!googleCalendar || !googleCalendar.isAuthed) return;
+
+    let changed = false;
+
+    for (const task of this.tasks) {
+      for (const st of task.subtasks) {
+        if (st.done) continue; // leave completed subtasks alone
+
+        const keptBlocks = [];
+        for (const b of st.blocks) {
+          if (!b.eventId) {
+            // never pushed to calendar → keep as-is
+            keptBlocks.push(b);
+            continue;
+          }
+
+          let real;
+          try {
+            real = await googleCalendar.getEventById(b.eventId);
+          } catch (e) {
+            // network error → keep block, don't lose data
+            keptBlocks.push(b);
+            continue;
+          }
+
+          if (real === null) {
+            // event was deleted in Google Calendar → drop the block
+            changed = true;
+            continue; // don't keep it
+          }
+
+          // event exists → sync date/time/hours to match reality
+          const newDate = this._ymdLocal(real.start);
+          const newStart = this._hhmm(real.start);
+          const newHours = (real.end - real.start) / 3600000;
+
+          if (b.date !== newDate || b.start !== newStart ||
+              Math.abs(b.hoursNum - newHours) > 0.001) {
+            b.date = newDate;
+            b.start = newStart;
+            b.hours = Math.round(newHours * 100) / 100; // round to avoid float noise
+            changed = true;
+          }
+          keptBlocks.push(b);
+        }
+        st.blocks = keptBlocks;
+      }
+    }
+
+    if (changed) {
+      this._save(); // persists locally + Drive, and notifies → re-render
+    }
+    return changed;
+  }
+
+  // local-time YYYY-MM-DD (avoid UTC shift)
+  _ymdLocal(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  _hhmm(d) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
   // Called after Google connects: pull from Drive (last-write-wins = Drive wins on load)
   async loadFromDrive() {
     if (!this.drive) { this._setStatus('offline'); return; }

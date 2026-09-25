@@ -108,6 +108,26 @@ export class GoogleCalendar {
     }
   }
 
+  // Fetch a single event by ID from primary. Returns {start, end} or null if deleted.
+  async getEventById(eventId) {
+    try {
+      const resp = await gapi.client.calendar.events.get({
+        calendarId: 'primary',
+        eventId,
+      });
+      const e = resp.result;
+      if (e.status === 'cancelled') return null;
+      if (!e.start || !e.start.dateTime) return null;
+      return {
+        start: new Date(e.start.dateTime),
+        end: new Date(e.end.dateTime),
+      };
+    } catch (err) {
+      if (err.status === 404 || err.status === 410) return null; // deleted
+      throw err;
+    }
+  }
+  
   _signOut() {
     const token = gapi.client.getToken();
     if (token) {
