@@ -210,6 +210,7 @@ export class GoogleCalendar {
         description: description || 'Scheduled via Task Grid',
         start: { dateTime: startDt.toISOString() },
         end: { dateTime: endDt.toISOString() },
+        colorId: '6', // tangerine?
       },
     });
     return resp.result.id;
