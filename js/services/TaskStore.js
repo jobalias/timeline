@@ -1,4 +1,4 @@
-import { Task } from '../models/Task.js';
+import { Task, PALETTE } from '../models/Task.js';
 
 const STORAGE_KEY = 'taskGrid';
 
@@ -96,8 +96,11 @@ export class TaskStore {
     const remote = await this.drive.load();
     if (remote && Array.isArray(remote)) {
       this.tasks = remote.map((t) => new Task(t));
+      let colorIndex = 0;
       for (const t of this.tasks) {
+        t.color = PALETTE[colorIndex % PALETTE.length];
         this.used_colors.push(t.color);
+        colorIndex++;
       }
       this._saveLocal();
       this._notify();
