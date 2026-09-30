@@ -37,16 +37,24 @@ export class GoogleCalendar {
       scope: SCOPES,
       callback: (resp) => {
         if (resp.error) {
-          console.warn('Auth error:', resp.error);
+          // silent attempt failed (e.g. consent needed) — only retry with a
+          // popup if the user is actively trying to sign in
+          if (this._userInitiatedSignIn) {
+            this._userInitiatedSignIn = false;
+            this.tokenClient.requestAccessToken({ prompt: 'consent' });
+          } else {
+            console.warn('Auth error:', resp.error);
+          }
           return;
         }
+        this._userInitiatedSignIn = false;
         this._onTokenReceived(resp);
       },
     });
     this.gisReady = true;
   }
 
-  _onTokenReceived(resp) {
+_onTokenReceived(resp) {
     const expiresAt = Date.now() + (resp.expires_in - 60) * 1000; // 60s safety margin
     const tokenData = { access_token: resp.access_token, expiresAt };
     localStorage.setItem(TOKEN_KEY, JSON.stringify(tokenData));
@@ -55,27 +63,32 @@ export class GoogleCalendar {
     this.isAuthed = true;
     this.onAuthChange(true);
 
-    // schedule a silent refresh just before it expires
-    this._scheduleRefresh(expiresAt);
+    // schedule a QUIET expiry — no popup, just flip to login when it expires
+    this._scheduleExpiry(expiresAt);
   }
 
-  _scheduleRefresh(expiresAt) {
-    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+  _scheduleExpiry(expiresAt) {
+    if (this._expiryTimer) clearTimeout(this._expiryTimer);
     const delay = Math.max(0, expiresAt - Date.now());
-    this._refreshTimer = setTimeout(() => this._silentRefresh(), delay);
+    this._expiryTimer = setTimeout(() => this._quietSignOut(), delay);
   }
 
-  _silentRefresh() {
-    // request a new token without showing a popup
-    if (this.tokenClient) {
-      this.tokenClient.requestAccessToken({ prompt: '' });
-    }
+  // Quietly sign out (no popup, no revoke) — just show the login screen
+  _quietSignOut() {
+    if (this._expiryTimer) clearTimeout(this._expiryTimer);
+    try { gapi.client.setToken(null); } catch (e) {}
+    localStorage.removeItem(TOKEN_KEY);
+    this.isAuthed = false;
+    this.onAuthChange(false); // → app shows login screen, no interruption
   }
 
   // On page load, try to restore a saved token
   _restoreSession() {
     const raw = localStorage.getItem(TOKEN_KEY);
-    if (!raw) return;
+    if (!raw) {
+      this.onAuthChange(false); // no token → login screen
+      return;
+    }
 
     try {
       const { access_token, expiresAt } = JSON.parse(raw);
@@ -84,17 +97,19 @@ export class GoogleCalendar {
         gapi.client.setToken({ access_token });
         this.isAuthed = true;
         this.onAuthChange(true);
-        this._scheduleRefresh(expiresAt);
+        this._scheduleExpiry(expiresAt);
       } else {
-        // expired → try a silent refresh (works if consent still granted)
-        this._silentRefresh();
+        // expired → quietly show login (NO silent refresh popup)
+        localStorage.removeItem(TOKEN_KEY);
+        this.onAuthChange(false);
       }
     } catch (e) {
       localStorage.removeItem(TOKEN_KEY);
+      this.onAuthChange(false);
     }
   }
 
-  toggleAuth() {
+toggleAuth() {
     if (!this.gisReady || !this.gapiReady) {
       alert('Google not loaded yet, try again in a sec.');
       return;
@@ -102,8 +117,8 @@ export class GoogleCalendar {
     if (this.isAuthed) {
       this._signOut();
     } else {
-      // first time / re-consent → show the popup
-      this.tokenClient.requestAccessToken({ prompt: 'consent' });
+      this._userInitiatedSignIn = true; // ← mark that YOU clicked
+      this.tokenClient.requestAccessToken({ prompt: '' }); // try silent first
     }
   }
 
@@ -111,18 +126,15 @@ export class GoogleCalendar {
   async getEventById(eventId) {
     try {
       const resp = await gapi.client.calendar.events.get({
-        calendarId: 'primary',
-        eventId,
+        calendarId: 'primary', eventId,
       });
       const e = resp.result;
       if (e.status === 'cancelled') return null;
       if (!e.start || !e.start.dateTime) return null;
-      return {
-        start: new Date(e.start.dateTime),
-        end: new Date(e.end.dateTime),
-      };
+      return { start: new Date(e.start.dateTime), end: new Date(e.end.dateTime) };
     } catch (err) {
-      if (err.status === 404 || err.status === 410) return null; // deleted
+      if (err.status === 404 || err.status === 410) return null;
+      if (this._handleApiError(err)) return null; // ← add
       throw err;
     }
   }
@@ -132,17 +144,20 @@ export class GoogleCalendar {
     const startDt = new Date(startDate + 'T00:00:00');
     startDt.setHours(h, m, 0, 0);
     const endDt = new Date(startDt.getTime() + parseFloat(hours) * 3600 * 1000);
-
-    const resp = await gapi.client.calendar.events.patch({
-      calendarId: 'primary',
-      eventId,
-      resource: {
-        summary,
-        start: { dateTime: startDt.toISOString() },
-        end: { dateTime: endDt.toISOString() },
-      },
-    });
-    return resp.result.id;
+    try {
+      const resp = await gapi.client.calendar.events.patch({
+        calendarId: 'primary', eventId,
+        resource: {
+          summary,
+          start: { dateTime: startDt.toISOString() },
+          end: { dateTime: endDt.toISOString() },
+        },
+      });
+      return resp.result.id;
+    } catch (err) {
+      if (this._handleApiError(err)) return null; // ← add
+      throw err;
+    }
   }
 
   _signOut() {
@@ -152,18 +167,21 @@ export class GoogleCalendar {
       gapi.client.setToken(null);
     }
     localStorage.removeItem(TOKEN_KEY);
-    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+    if (this._expiryTimer) clearTimeout(this._expiryTimer);
     this.isAuthed = false;
     this.onAuthChange(false);
   }
 
   async listCalendars() {
-    const resp = await gapi.client.calendar.calendarList.list();
-    return (resp.result.items || []).map((c) => ({
-      id: c.id,
-      name: c.summary,
-      primary: !!c.primary,
-    }));
+    try {
+      const resp = await gapi.client.calendar.calendarList.list();
+      return (resp.result.items || []).map((c) => ({
+        id: c.id, name: c.summary, primary: !!c.primary,
+      }));
+    } catch (err) {
+      if (this._handleApiError(err)) return []; // ← add
+      throw err;
+    }
   }
 
   // Fetch events from one or more calendars, merged into a single array
@@ -191,6 +209,7 @@ export class GoogleCalendar {
             });
           });
       } catch (err) {
+        if (this._handleApiError(err)) return []; // auth expired → quiet login
         console.warn('Failed to fetch calendar', calId, err);
       }
     }
@@ -202,28 +221,43 @@ export class GoogleCalendar {
     const startDt = new Date(startDate + 'T00:00:00');
     startDt.setHours(h, m, 0, 0);
     const endDt = new Date(startDt.getTime() + parseFloat(hours) * 3600 * 1000);
-
-    const resp = await gapi.client.calendar.events.insert({
-      calendarId: 'primary',
-      resource: {
-        summary,
-        description: description || 'Scheduled via Task Grid',
-        start: { dateTime: startDt.toISOString() },
-        end: { dateTime: endDt.toISOString() },
-        colorId: '4', // flamingo
-      },
-    });
-    return resp.result.id;
+    try {
+      const resp = await gapi.client.calendar.events.insert({
+        calendarId: 'primary',
+        resource: {
+          summary,
+          description: description || 'Scheduled via Task Grid',
+          start: { dateTime: startDt.toISOString() },
+          end: { dateTime: endDt.toISOString() },
+          colorId: '4',
+        },
+      });
+      return resp.result.id;
+    } catch (err) {
+      if (this._handleApiError(err)) return null; // ← add
+      throw err;
+    }
   }
 
   async deleteEvent(eventId) {
     try {
       await gapi.client.calendar.events.delete({
-        calendarId: 'primary',
-        eventId,
+        calendarId: 'primary', eventId,
       });
     } catch (err) {
-      if (err.status !== 404 && err.status !== 410) throw err;
+      if (err.status === 404 || err.status === 410) return;
+      if (this._handleApiError(err)) return; // ← add
+      throw err;
     }
+  }
+
+  // Call this in catch blocks to detect auth failures
+  _handleApiError(err) {
+    if (err && (err.status === 401 ||
+        (err.result && err.result.error && err.result.error.code === 401))) {
+      this._quietSignOut();
+      return true; // was an auth error
+    }
+    return false;
   }
 }
