@@ -52,6 +52,44 @@ export class PlannerView {
     }
   }
 
+  // Check if a given date matches the selected subtask's due date
+  _isDueDate(date) {
+    if (!this.selectedSubtask) return false;
+    const task = this.store.find(this.selectedSubtask.taskId);
+    const st = task?.subtasks[this.selectedSubtask.subIndex];
+    if (!st || !st.due) return false;
+
+    // compare year/month/day (local)
+    const due = new Date(st.due + 'T00:00:00');
+    return date.getFullYear() === due.getFullYear() &&
+           date.getMonth() === due.getMonth() &&
+           date.getDate() === due.getDate();
+  }
+
+  _highlightDueColumn() {
+    // clear any existing highlight
+    this.calendarEl.querySelectorAll('.due-date-column, .due-date-header')
+      .forEach((el) => el.classList.remove('due-date-column', 'due-date-header'));
+
+    if (!this.selectedSubtask) return;
+    const task = this.store.find(this.selectedSubtask.taskId);
+    const st = task?.subtasks[this.selectedSubtask.subIndex];
+    if (!st || !st.due) return;
+
+    // FullCalendar tags day cells with data-date="YYYY-MM-DD"
+    const dueStr = st.due; // already YYYY-MM-DD
+
+    // highlight the day column cells
+    this.calendarEl
+      .querySelectorAll(`.fc-timegrid-col[data-date="${dueStr}"], .fc-day[data-date="${dueStr}"]`)
+      .forEach((el) => el.classList.add('due-date-column'));
+
+    // highlight the header
+    this.calendarEl
+      .querySelectorAll(`.fc-col-header-cell[data-date="${dueStr}"]`)
+      .forEach((el) => el.classList.add('due-date-header'));
+  }
+
   _initCalendar() {
     this.calendar = new FullCalendar.Calendar(this.calendarEl, {
       initialView: 'timeGridWeek',
@@ -95,7 +133,16 @@ export class PlannerView {
         if (p.taskId === this.selectedSubtask.taskId) return ['block-sibling'];
         return ['block-dimmed'];
       },
-
+      // Highlight the selected subtask's due-date column in red
+      dayCellClassNames: (arg) => {
+        return this._isDueDate(arg.date) ? ['due-date-column'] : [];
+      },
+      dayHeaderClassNames: (arg) => {
+        return this._isDueDate(arg.date) ? ['due-date-header'] : [];
+      },
+      datesSet: () => {
+        this._highlightDueColumn(); // re-apply when navigating/switching views
+      },
       select: (info) => this._onSelectRange(info),
       eventDrop: (info) => this._onEventChanged(info),
       eventResize: (info) => this._onEventChanged(info),
@@ -181,13 +228,23 @@ export class PlannerView {
 
   _selectSubtask(taskId, subIndex) {
     if (this._isSelected(taskId, subIndex)) {
-      this.selectedSubtask = null; // toggle off
+      this.selectedSubtask = null;
     } else {
       this.selectedSubtask = { taskId, subIndex };
     }
     this._clearClickedBlock();
     this._renderBacklog();
-    this.calendar.refetchEvents(); // re-render with new editability/emphasis
+    this.calendar.refetchEvents();
+    this._highlightDueColumn();   // ← add
+    this._updateCounter();
+  }
+
+  _switchSelection(taskId, subIndex) {
+    this.selectedSubtask = { taskId, subIndex };
+    this._clearClickedBlock();
+    this._renderBacklog();
+    this.calendar.refetchEvents();
+    this._highlightDueColumn();   // ← add
     this._updateCounter();
   }
 
@@ -375,14 +432,6 @@ async _onEventChanged(info) {
     this._switchSelection(p.taskId, p.subIndex);
   }
 
-  _switchSelection(taskId, subIndex) {
-    this.selectedSubtask = { taskId, subIndex };
-    this._clearClickedBlock();
-    this._renderBacklog();
-    this.calendar.refetchEvents();
-    this._updateCounter();
-  }
-
   // ---------- backlog ----------
   async render() {
     if (!this.isActive || !this.calendar) return;
@@ -390,6 +439,20 @@ async _onEventChanged(info) {
     this._updateCounter();
   }
  
+  // Returns the earliest block start as a timestamp (ms), or Infinity if no blocks
+  _getSoonestStartTime(st) {
+    let soonest = Infinity;
+    st.blocks.forEach((b) => {
+      if (!b.date || !b.start) return;
+      const [h, m] = b.start.split(':').map(Number);
+      const d = new Date(b.date + 'T00:00:00');
+      d.setHours(h, m, 0, 0);
+      const t = d.getTime();
+      if (t < soonest) soonest = t;
+    });
+    return soonest;
+  }
+
   _renderBacklog() {
     const cards = [];
     this.store.getAll().forEach((task) => {
@@ -399,33 +462,35 @@ async _onEventChanged(info) {
         const remaining = st.estHoursNum - st.allocatedHours;
         const fullyScheduled = st.estHoursNum > 0 && remaining <= 0;
         const isSelected = this._isSelected(task.id, subIndex);
+        const soonestStart = this._getSoonestStartTime(st);
 
-        // would this card normally be hidden?
         const wouldBeHidden = this.hideScheduled && fullyScheduled;
-
-        // show it if not hidden, OR if it's selected (summoned)
         if (wouldBeHidden && !isSelected) return;
 
-        // "popped" = a card that's only visible because it was summoned
         const isPopped = wouldBeHidden && isSelected;
 
-        cards.push({ task, st, subIndex, remaining, isPopped });
+        cards.push({ task, st, subIndex, remaining, isPopped, soonestStart });
       });
     });
 
-    // Sort: popped (summoned-but-otherwise-hidden) cards first;
-    // everyone else keeps natural order (needs-time first, then rest)
     cards.sort((a, b) => {
-      // only popped cards jump to front
+      // 1. popped (summoned-but-hidden) cards jump to front
       const aPop = a.isPopped ? 0 : 1;
       const bPop = b.isPopped ? 0 : 1;
       if (aPop !== bPop) return aPop - bPop;
 
-      // otherwise: natural order — needs-time first, more hours first
+      // 2. not-fully-allocated (needs time) before fully-allocated
       const aNeeds = a.remaining > 0 ? 0 : 1;
       const bNeeds = b.remaining > 0 ? 0 : 1;
       if (aNeeds !== bNeeds) return aNeeds - bNeeds;
-      return b.remaining - a.remaining;
+
+      // 3a. within "needs time" group: more hours remaining first
+      if (aNeeds === 0) {
+        return b.remaining - a.remaining;
+      }
+
+      // 3b. within "fully allocated" group: soonest block start first
+      return a.soonestStart - b.soonestStart;
     });
 
     if (cards.length === 0) {

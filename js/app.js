@@ -76,7 +76,9 @@ class App {
       onSave: () => this.dayView.render(), // refresh day view with new selection
     });
 
-  this.taskModal = new TaskModal(this.store, this.gcal, {
+    this.deleteDialog = new DeleteDialog();
+
+    this.taskModal = new TaskModal(this.store, this.gcal, this.deleteDialog, {
       onAfterSave: (taskId, newSubtaskIndices) =>
         this._startSchedulingSequence(taskId, newSubtaskIndices),
     });

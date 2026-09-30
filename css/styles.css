@@ -1185,3 +1185,18 @@ input[type=text], input[type=date], input[type=time], input[type=number] {
 .cal-close-x:hover {
   background: #ffe5e5;
 }
+
+/* Due-date column highlight (when a subtask is selected) */
+.fc .fc-timegrid-col.due-date-column {
+  background: rgba(255, 59, 48, 0.08);
+}
+.fc .fc-day.due-date-column {
+  background: rgba(255, 59, 48, 0.08);
+}
+.fc .fc-col-header-cell.due-date-header {
+  background: rgba(255, 59, 48, 0.15);
+}
+.fc .fc-col-header-cell.due-date-header .fc-col-header-cell-cushion {
+  color: #cf222e;
+  font-weight: 700;
+}
