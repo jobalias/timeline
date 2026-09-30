@@ -15,13 +15,15 @@ export class CalendarView {
     this.weekStart = this._mondayOf(new Date());
     this.busyEvents = [];
     this.blocks = [];
-
+    
     // DOM refs
     this.overlay = document.getElementById('calOverlay');
     this.title = document.getElementById('calTitle');
     this.counter = document.getElementById('calCounter');
     this.gridWrap = document.getElementById('calGridWrap');
-
+    
+    
+    document.getElementById('calScheduleLater').addEventListener('click', () => this._scheduleLater());
     document.getElementById('calPrevWeek').addEventListener('click', () => this._shiftWeek(-7));
     document.getElementById('calThisWeek').addEventListener('click', () => this._thisWeek());
     document.getElementById('calNextWeek').addEventListener('click', () => this._shiftWeek(7));
@@ -30,7 +32,9 @@ export class CalendarView {
   }
 
   // ---------- open / close ----------
-  async open(taskId, subIndex) {
+  async open(taskId, subIndex, opts = {}) {
+    this.context = { taskId, subIndex };
+    this._inCreationSequence = !!opts.sequence;
     this.context = { taskId, subIndex };
     const task = this.store.find(taskId);
     const st = task.subtasks[subIndex];
@@ -344,6 +348,7 @@ export class CalendarView {
       alert('Error: ' + (err.result?.error?.message || err.message));
       btn.disabled = false; btn.textContent = 'Push to Google Calendar';
     }
+    this.onDone({ cancelled: false, discardTask: false });
   }
 
   // ---------- helpers ----------
@@ -376,8 +381,21 @@ export class CalendarView {
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
   _cancel() {
-    this.overlay.classList.remove('open');
+    if (this._inCreationSequence) {
+      if (!confirm('Cancel and discard this new task? Your subtasks won\'t be saved.')) {
+        return; // don't close
+      }
+    }
+    document.getElementById('calOverlay').classList.remove('open');
+    const wasCreating = this._inCreationSequence;
     this.context = null;
-    this.onDone(null); // null = user cancelled, stop the sequence
+    this._inCreationSequence = false;
+    this.onDone({ cancelled: true, discardTask: wasCreating });
+  }
+  _scheduleLater() {
+    document.getElementById('calOverlay').classList.remove('open');
+    this._inCreationSequence = false;
+    this.context = null;
+    this.onDone({ cancelled: false, discardTask: false }); // keep task, stop sequence
   }
 }

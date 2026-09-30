@@ -23,58 +23,60 @@ export class TaskStore {
   // Check all incomplete subtasks' blocks against Google Calendar.
   // Removes deleted events, updates moved/resized ones.
   async reconcileWithCalendar(googleCalendar) {
-    if (!googleCalendar || !googleCalendar.isAuthed) return;
+    if (!googleCalendar || !googleCalendar.isAuthed) return false;
 
     let changed = false;
 
     for (const task of this.tasks) {
       for (const st of task.subtasks) {
-        if (st.done) continue; // leave completed subtasks alone
-
         const keptBlocks = [];
+
         for (const b of st.blocks) {
+          // No eventId → block isn't linked to any real event → remove it
           if (!b.eventId) {
-            // never pushed to calendar → keep as-is
-            keptBlocks.push(b);
+            changed = true;
             continue;
           }
 
+          // Has eventId → check if the event still exists in Google
           let real;
           try {
             real = await googleCalendar.getEventById(b.eventId);
           } catch (e) {
-            // network error → keep block, don't lose data
+            // network error → keep block (don't lose data on a transient error)
             keptBlocks.push(b);
             continue;
           }
 
           if (real === null) {
-            // event was deleted in Google Calendar → drop the block
+            // event was deleted in Google → remove the block
             changed = true;
-            continue; // don't keep it
+            continue;
           }
 
-          // event exists → sync date/time/hours to match reality
-          const newDate = this._ymdLocal(real.start);
-          const newStart = this._hhmm(real.start);
-          const newHours = (real.end - real.start) / 3600000;
-
-          if (b.date !== newDate || b.start !== newStart ||
-              Math.abs(b.hoursNum - newHours) > 0.001) {
-            b.date = newDate;
-            b.start = newStart;
-            b.hours = Math.round(newHours * 100) / 100; // round to avoid float noise
-            changed = true;
+          // event exists → sync block to match (for incomplete subtasks)
+          // for done subtasks, just keep as-is (don't move completed history around)
+          if (!st.done) {
+            const newDate = this._ymdLocal(real.start);
+            const newStart = this._hhmm(real.start);
+            const newHours = (real.end - real.start) / 3600000;
+            if (b.date !== newDate || b.start !== newStart ||
+                Math.abs(b.hoursNum - newHours) > 0.001) {
+              b.date = newDate;
+              b.start = newStart;
+              b.hours = Math.round(newHours * 100) / 100;
+              changed = true;
+            }
           }
+
           keptBlocks.push(b);
         }
+
         st.blocks = keptBlocks;
       }
     }
 
-    if (changed) {
-      this._save(); // persists locally + Drive, and notifies → re-render
-    }
+    if (changed) this._save();
     return changed;
   }
 
@@ -124,6 +126,15 @@ export class TaskStore {
     this._setStatus(ok ? 'synced' : 'failed');
   }
 
+  addBlockToSubtask(taskId, subIndex, block) {
+    const t = this.find(taskId);
+    if (!t) return;
+    const st = t.subtasks[subIndex];
+    if (!st) return;
+    st.blocks.push(block);
+    this._save();
+  }
+
   _setStatus(status) {
     this._status = status;
     this.syncStatusFn(status);
@@ -157,6 +168,63 @@ export class TaskStore {
     return [...this.tasks].sort(
       (a, b) => (isTaskDone(a) ? 1 : 0) - (isTaskDone(b) ? 1 : 0)
     );
+  }
+
+  // Remove blocks that have no matching Google event, and dedupe
+  async cleanupOrphanedBlocks(googleCalendar) {
+    if (!googleCalendar || !googleCalendar.isAuthed) {
+      return { removed: 0, deduped: 0 };
+    }
+
+    let removed = 0;
+    let deduped = 0;
+
+    for (const task of this.tasks) {
+      for (const st of task.subtasks) {
+        if (st.done) continue; // leave completed alone
+
+        const validBlocks = [];
+        const seenSignatures = new Set();
+
+        for (const b of st.blocks) {
+          // 1) dedupe: same date+start+hours = duplicate
+          const sig = `${b.date}|${b.start}|${b.hours}`;
+          if (seenSignatures.has(sig)) {
+            deduped++;
+            // if it has an eventId, delete that duplicate from Google too
+            if (b.eventId) {
+              try { await googleCalendar.deleteEvent(b.eventId); } catch {}
+            }
+            continue;
+          }
+          seenSignatures.add(sig);
+
+          // 2) orphan check: does the Google event still exist?
+          if (b.eventId) {
+            let exists = true;
+            try {
+              const real = await googleCalendar.getEventById(b.eventId);
+              exists = real !== null;
+            } catch {
+              exists = true; // network error → keep it, don't lose data
+            }
+            if (!exists) {
+              removed++;
+              continue; // event gone → drop this orphaned block
+            }
+          }
+          // blocks with no eventId: keep (can't verify) — or optionally drop
+          validBlocks.push(b);
+        }
+
+        st.blocks = validBlocks;
+      }
+    }
+
+    if (removed > 0 || deduped > 0) {
+      this._save();
+    }
+    return { removed, deduped };
   }
 
   // ---------- mutations ----------

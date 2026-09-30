@@ -8,6 +8,7 @@ import { DeleteDialog } from './views/DeleteDialog.js';
 import { DayView } from './views/DayView.js';
 import { Settings } from './services/Settings.js';
 import { CalendarPicker } from './views/CalendarPicker.js';
+import { PlannerView } from './views/PlannerView.js';
 
 class App {
   constructor() {
@@ -18,6 +19,8 @@ class App {
     this.settings = new Settings();
     this.store.attachDrive(this.drive);
     this.dayView = new DayView(this.store, this.gcal);
+    this.plannerView = new PlannerView(this.store, this.gcal, this.settings);
+
     // sync status → toolbar
     const syncEl = document.getElementById('syncStatus');
 // sync status → badge + warning banner
@@ -95,11 +98,12 @@ class App {
     this._bindToolbar();
     this._bindAuth();
     this._bindLogin();
-
+    this._bindTabs();
     // re-render grid whenever data changes
     this.store.subscribe(() => {
       this.grid.render();
       this.dayView.render();
+      this.plannerView.refresh();
     });
 
     // start Google (will auto-restore session if a token is saved)
@@ -150,6 +154,7 @@ class App {
 
   async _reconcile() {
     const btn = document.getElementById('refreshBtn');
+    this.plannerView.refresh();
     if (btn) { btn.disabled = true; btn.textContent = '🔄 Syncing…'; }
 
     try {
@@ -244,7 +249,8 @@ class App {
     const task = this.store.find(taskId);
     if (!task || task.subtasks.length === 0) return;
 
-    // only schedule subtasks that have estimated hours and aren't done
+    this._currentSchedulingTaskId = taskId; // ← track it
+
     this._schedQueue = task.subtasks
       .map((st, i) => ({ taskId, subIndex: i, st }))
       .filter((x) => x.st.estHoursNum > 0 && !x.st.done);
@@ -253,18 +259,74 @@ class App {
   }
 
   _nextInQueue() {
-    if (!this._schedQueue || this._schedQueue.length === 0) return;
-    const next = this._schedQueue.shift();
-    this.calendarView.open(next.taskId, next.subIndex);
-  }
-
-  _advanceScheduling(finishedContext) {
-    if (finishedContext === null) {
-      // user cancelled → stop the whole sequence
-      this._schedQueue = [];
+    if (!this._schedQueue || this._schedQueue.length === 0) {
+      this._currentSchedulingTaskId = null; // sequence done
       return;
     }
+    const next = this._schedQueue.shift();
+    this.calendarView.open(next.taskId, next.subIndex, { sequence: true });
+  }
+
+  _advanceScheduling(result) {
+    // result: { cancelled, discardTask } or null (legacy)
+    const cancelled = result === null || result?.cancelled;
+    const discardTask = result?.discardTask;
+
+    if (discardTask && this._currentSchedulingTaskId) {
+      // delete the freshly-created task (user cancelled during creation)
+      this._discardTask(this._currentSchedulingTaskId);
+    }
+
+    if (cancelled) {
+      this._schedQueue = [];
+      this._currentSchedulingTaskId = null;
+      return;
+    }
+
     this._nextInQueue();
+  }
+
+  _bindTabs() {
+      const tabGrid = document.getElementById('tabGrid');
+      const tabPlanner = document.getElementById('tabPlanner');
+      const gridContainer = document.getElementById('gridViewContainer');
+      const plannerContainer = document.getElementById('plannerViewContainer');
+      const addTaskBtn = document.getElementById('plannerAddTaskBtn');
+      const refreshBtn = document.getElementById('plannerRefreshBtn');
+
+      refreshBtn.addEventListener('click', () => this._reconcile());
+      addTaskBtn.addEventListener('click', () => this.taskModal.openNew());
+      
+      tabGrid.addEventListener('click', () => {
+        tabGrid.classList.add('active');
+        tabPlanner.classList.remove('active');
+        gridContainer.style.display = 'block';
+        plannerContainer.style.display = 'none';
+        this.plannerView.deactivate();
+        this.grid.render();
+      });
+
+      tabPlanner.addEventListener('click', () => {
+        tabPlanner.classList.add('active');
+        tabGrid.classList.remove('active');
+        gridContainer.style.display = 'none';
+        plannerContainer.style.display = 'block';
+        this.plannerView.activate();
+      });
+    }
+
+  async _discardTask(taskId) {
+    const task = this.store.find(taskId);
+    if (!task) return;
+
+    // if any blocks were already created (earlier subtasks in the sequence),
+    // delete their Google events too
+    const hasEvents = task.subtasks.some((s) => s.blocks.some((b) => b.eventId));
+    if (hasEvents && this.gcal.isAuthed) {
+      await this.store.removeTask(taskId, 'all', this.gcal); // deletes events + task
+    } else {
+      await this.store.removeTask(taskId, 'none', this.gcal); // just remove task
+    }
   }
 }
 
