@@ -76,7 +76,7 @@ class App {
       onSave: () => this.dayView.render(), // refresh day view with new selection
     });
 
-    this.taskModal = new TaskModal(this.store, {
+  this.taskModal = new TaskModal(this.store, this.gcal, {
       onAfterSave: (taskId, newSubtaskIndices) =>
         this._startSchedulingSequence(taskId, newSubtaskIndices),
     });

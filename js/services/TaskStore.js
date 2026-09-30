@@ -230,20 +230,68 @@ export class TaskStore {
   // ---------- mutations ----------
   add(task) { this.tasks.push(task); this._save(); }
 
-  update(id, { name, subtasks }) {
+  async update(id, { name, subtasks }, googleCalendar) {
     const t = this.find(id);
     if (!t) return;
+
+    const oldTaskName = t.name;
+    const taskNameChanged = oldTaskName !== name;
+
+    // Track which subtasks were renamed (by ID) so we can update their events
+    const renamedSubtasks = []; // { subtask, oldName, newName }
+
     subtasks.forEach((ns) => {
-      const old = t.subtasks.find((o) => o.id === ns.id);  // match by ID, not name
+      const old = t.subtasks.find((o) => o.id === ns.id);
       if (old) {
         if (old.blocks.length) ns.blocks = old.blocks;
         ns.done = old.done;
         ns.actualHours = old.actualHours;
+
+        // detect subtask rename
+        if (old.name !== ns.name) {
+          renamedSubtasks.push({ subtask: ns, oldName: old.name, newName: ns.name });
+        }
       }
     });
+
     t.name = name;
     t.subtasks = subtasks;
     this._save();
+
+    // Update Google Calendar event titles for renamed items
+    if (googleCalendar && googleCalendar.isAuthed) {
+      await this._updateEventTitles(t, taskNameChanged, renamedSubtasks, googleCalendar);
+    }
+  }
+
+  // Update event titles when task/subtask names change
+  async _updateEventTitles(task, taskNameChanged, renamedSubtasks, googleCalendar) {
+    // If the TASK name changed, ALL subtasks' events need new titles
+    // If only some subtasks were renamed, just those need updating
+    const subtasksToUpdate = new Set();
+
+    if (taskNameChanged) {
+      // every subtask with events needs its title refreshed
+      task.subtasks.forEach((st) => subtasksToUpdate.add(st));
+    }
+    renamedSubtasks.forEach(({ subtask }) => subtasksToUpdate.add(subtask));
+
+    for (const st of subtasksToUpdate) {
+      for (const b of st.blocks) {
+        if (!b.eventId) continue;
+        try {
+          await googleCalendar.updateEvent({
+            eventId: b.eventId,
+            summary: `${task.name}: ${st.name}`,
+            startDate: b.date,
+            startTime: b.start,
+            hours: b.hours,
+          });
+        } catch (e) {
+          console.warn('Failed to update event title:', e);
+        }
+      }
+    }
   }
 
   setSubtaskBlocks(taskId, subIndex, blocks) {

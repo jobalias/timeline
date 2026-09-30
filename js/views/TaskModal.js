@@ -3,8 +3,9 @@ import { Subtask } from '../models/Subtask.js';
 import { escapeHtml } from '../utils.js';
 
 export class TaskModal {
-  constructor(store, { onAfterSave = () => {} } = {}) {
+  constructor(store, googleCalendar, { onAfterSave = () => {} } = {}) {
     this.store = store;
+    this.gcal = googleCalendar;
     this.onAfterSave = onAfterSave;
     this.editingId = null;
 
@@ -66,40 +67,34 @@ export class TaskModal {
     this.subtaskList.appendChild(row);
   }
 
-  _save() {
+  async _save() {
     const name = this.nameInput.value.trim();
-    if (!name) {
-      alert('Please enter a task name');
-      return;
-    }
+    if (!name) { alert('Please enter a task name'); return; }
+
     const rows = this.subtaskList.querySelectorAll('.subtask-row');
     const subtasks = [];
     rows.forEach((r) => {
       const inputs = r.querySelectorAll('input');
       const stName = inputs[0].value.trim();
       if (!stName) return;
-      subtasks.push(
-        new Subtask({
-          id: r.dataset.subtaskId || null,   // preserve ID, or null = new
-          name: stName,
-          due: inputs[1].value,
-          estHours: inputs[2].value,
-        })
-      );
+      subtasks.push(new Subtask({
+        id: r.dataset.subtaskId || null,
+        name: stName,
+        due: inputs[1].value,
+        estHours: inputs[2].value,
+      }));
     });
 
     let savedId;
     let newSubtaskIndices = [];
 
     if (this.editingId) {
-      // record existing IDs before updating
       const existing = this.store.find(this.editingId);
       const existingIds = new Set(existing.subtasks.map((s) => s.id));
 
-      this.store.update(this.editingId, { name, subtasks });
+      await this.store.update(this.editingId, { name, subtasks }, this.gcal); // ← await + gcal
       savedId = this.editingId;
 
-      // new subtasks = those whose ID didn't exist before
       const updated = this.store.find(savedId);
       updated.subtasks.forEach((s, i) => {
         if (!existingIds.has(s.id)) newSubtaskIndices.push(i);
@@ -108,7 +103,7 @@ export class TaskModal {
       const task = new Task({ name, subtasks });
       this.store.add(task);
       savedId = task.id;
-      newSubtaskIndices = task.subtasks.map((_, i) => i); // all new
+      newSubtaskIndices = task.subtasks.map((_, i) => i);
     }
 
     this.close();
