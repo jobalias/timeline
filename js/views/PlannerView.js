@@ -86,11 +86,13 @@ export class PlannerView {
       },
 
       // emphasis via classes (re-runs on every render — reliable)
+      // emphasis via classes (re-runs on every render — reliable)
       eventClassNames: (arg) => {
         const p = arg.event.extendedProps;
-        if (p.kind !== 'block') return [];       // Google events unaffected
-        if (!this.selectedSubtask) return [];    // nothing selected → normal
+        if (p.kind !== 'block') return [];
+        if (!this.selectedSubtask) return [];
         if (this._isSelected(p.taskId, p.subIndex)) return ['block-emphasized'];
+        if (p.taskId === this.selectedSubtask.taskId) return ['block-sibling'];
         return ['block-dimmed'];
       },
 
@@ -277,25 +279,40 @@ async _onEventChanged(info) {
   }
 
   // ---------- click block → show delete ✕ ----------
+  // ---------- click block → select subtask, or show ✕ if already selected ----------
   _onEventClick(info) {
     const p = info.event.extendedProps;
-    if (p.kind !== 'block') return;
-    if (!this._isSelected(p.taskId, p.subIndex)) return; // only selected editable
+    if (p.kind !== 'block') return;   // never select Google events
+    if (p.done) return;               // done subtasks aren't selectable
 
-    this._clearClickedBlock();
-    this._clickedBlock = { info, p };
+    // Case 1: this block's subtask IS the selected one → show delete ✕
+    if (this._isSelected(p.taskId, p.subIndex)) {
+      this._clearClickedBlock();
+      this._clickedBlock = { info, p };
+      const el = info.el;
+      const x = document.createElement('div');
+      x.className = 'block-del-x';
+      x.textContent = '✕';
+      x.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._deleteClickedBlock();
+      });
+      el.appendChild(x);
+      el.classList.add('block-clicked');
+      return;
+    }
 
-    // inject a delete ✕ button into the event element
-    const el = info.el;
-    const x = document.createElement('div');
-    x.className = 'block-del-x';
-    x.textContent = '✕';
-    x.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._deleteClickedBlock();
-    });
-    el.appendChild(x);
-    el.classList.add('block-clicked');
+    // Case 2: same TASK, different subtask → single-click switches to it
+    if (this.selectedSubtask && p.taskId === this.selectedSubtask.taskId) {
+      this._switchSelection(p.taskId, p.subIndex);
+      return;
+    }
+
+    // Case 3: different task OR nothing selected
+    if (!this.selectedSubtask) {
+      this._switchSelection(p.taskId, p.subIndex); // first selection = easy
+      return;
+    }
   }
 
   _clearClickedBlock() {
@@ -355,25 +372,11 @@ async _onEventChanged(info) {
     const p = info.event.extendedProps;
     if (p.kind !== 'block') return;
     if (p.done) return;
-
-    const task = this.store.find(p.taskId);
-    const st = task?.subtasks[p.subIndex];
-    if (!task || !st) return;
-
-    // selecting it will summon its card (via the isSelected check in _renderBacklog)
-    this.selectedSubtask = { taskId: p.taskId, subIndex: p.subIndex };
-    this._clearClickedBlock();
-    this._renderBacklog();
-    this.calendar.refetchEvents();
-    this._updateCounter();
+    this._switchSelection(p.taskId, p.subIndex);
   }
 
-  _selectSubtask(taskId, subIndex) {
-    if (this._isSelected(taskId, subIndex)) {
-      this.selectedSubtask = null; // deselect
-    } else {
-      this.selectedSubtask = { taskId, subIndex };
-    }
+  _switchSelection(taskId, subIndex) {
+    this.selectedSubtask = { taskId, subIndex };
     this._clearClickedBlock();
     this._renderBacklog();
     this.calendar.refetchEvents();
