@@ -49,6 +49,7 @@ export class TaskModal {
   _addSubtaskRow(data = {}) {
     const row = document.createElement('div');
     row.className = 'subtask-row';
+    if (data.id) row.dataset.subtaskId = data.id;   // ← ADD THIS LINE
     row.innerHTML = `
       <button class="del-btn">✕</button>
       <input class="name-input" type="text" placeholder="Subtask name"
@@ -79,6 +80,7 @@ export class TaskModal {
       if (!stName) return;
       subtasks.push(
         new Subtask({
+          id: r.dataset.subtaskId || null,   // preserve ID, or null = new
           name: stName,
           due: inputs[1].value,
           estHours: inputs[2].value,
@@ -87,15 +89,29 @@ export class TaskModal {
     });
 
     let savedId;
+    let newSubtaskIndices = [];
+
     if (this.editingId) {
+      // record existing IDs before updating
+      const existing = this.store.find(this.editingId);
+      const existingIds = new Set(existing.subtasks.map((s) => s.id));
+
       this.store.update(this.editingId, { name, subtasks });
       savedId = this.editingId;
+
+      // new subtasks = those whose ID didn't exist before
+      const updated = this.store.find(savedId);
+      updated.subtasks.forEach((s, i) => {
+        if (!existingIds.has(s.id)) newSubtaskIndices.push(i);
+      });
     } else {
       const task = new Task({ name, subtasks });
       this.store.add(task);
       savedId = task.id;
+      newSubtaskIndices = task.subtasks.map((_, i) => i); // all new
     }
+
     this.close();
-    this.onAfterSave(savedId);
+    this.onAfterSave(savedId, newSubtaskIndices);
   }
 }

@@ -54,9 +54,7 @@ export class CalendarView {
 
   close() {
     this.overlay.classList.remove('open');
-    const finished = this.context;
     this.context = null;
-    this.onDone(finished); // signal which subtask we just finished
   }
 
   // ---------- week nav ----------
@@ -300,7 +298,6 @@ export class CalendarView {
     }
   }
 
-  // ---------- push ----------
   async _push() {
     if (!this.gcal.isAuthed) { alert('Please connect Google first.'); return; }
 
@@ -338,17 +335,27 @@ export class CalendarView {
       this.store.setSubtaskBlocks(this.context.taskId, this.context.subIndex, this.blocks);
 
       btn.textContent = '✓ Saved';
+
+      // close + advance AFTER the brief success message
       setTimeout(() => {
         btn.disabled = false;
         btn.textContent = 'Push to Google Calendar';
-        this.close();
+
+        // hide overlay directly (don't use close() if it calls onDone)
+        document.getElementById('calOverlay').classList.remove('open');
+        this.context = null;
+        this._inCreationSequence = false;
+
+        // signal success → advance to next subtask (called exactly once)
+        this.onDone({ cancelled: false, discardTask: false });
       }, 1000);
+
     } catch (err) {
       console.error(err);
       alert('Error: ' + (err.result?.error?.message || err.message));
       btn.disabled = false; btn.textContent = 'Push to Google Calendar';
+      // don't advance on error
     }
-    this.onDone({ cancelled: false, discardTask: false });
   }
 
   // ---------- helpers ----------

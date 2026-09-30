@@ -18,8 +18,9 @@ export class TimeBlock {
 export class Subtask {
   constructor({
     name = '', due = '', estHours = '', blocks = [],
-    done = false, actualHours = null,
+    done = false, actualHours = null, id = null,
   } = {}) {
+    this.id = id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
     this.name = name;
     this.due = due;
     this.estHours = estHours;
@@ -42,6 +43,7 @@ export class Subtask {
 
   toJSON() {
     return {
+      id: this.id,
       name: this.name,
       due: this.due,
       estHours: this.estHours,

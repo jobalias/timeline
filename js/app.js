@@ -77,7 +77,8 @@ class App {
     });
 
     this.taskModal = new TaskModal(this.store, {
-      onAfterSave: (taskId) => this._startSchedulingSequence(taskId),
+      onAfterSave: (taskId, newSubtaskIndices) =>
+        this._startSchedulingSequence(taskId, newSubtaskIndices),
     });
 
     this.grid = new GridView(this.store, {
@@ -245,15 +246,22 @@ class App {
   }
 
   // ==================== Sequential scheduling ====================
-  _startSchedulingSequence(taskId) {
+  _startSchedulingSequence(taskId, newSubtaskIndices) {
     const task = this.store.find(taskId);
     if (!task || task.subtasks.length === 0) return;
 
-    this._currentSchedulingTaskId = taskId; // ← track it
+    this._currentSchedulingTaskId = taskId;
 
-    this._schedQueue = task.subtasks
-      .map((st, i) => ({ taskId, subIndex: i, st }))
-      .filter((x) => x.st.estHoursNum > 0 && !x.st.done);
+    // If newSubtaskIndices is provided (even if empty), use it exactly.
+    // Empty array = nothing new = don't schedule anything.
+    // Only fall back to "all" if it's truly undefined/null.
+    const indices = Array.isArray(newSubtaskIndices)
+      ? newSubtaskIndices
+      : task.subtasks.map((_, i) => i);
+
+    this._schedQueue = indices
+      .map((i) => ({ taskId, subIndex: i, st: task.subtasks[i] }))
+      .filter((x) => x.st && x.st.estHoursNum > 0 && !x.st.done);
 
     this._nextInQueue();
   }

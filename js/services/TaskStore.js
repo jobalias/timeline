@@ -234,8 +234,12 @@ export class TaskStore {
     const t = this.find(id);
     if (!t) return;
     subtasks.forEach((ns) => {
-      const old = t.subtasks.find((o) => o.name === ns.name);
-      if (old && old.blocks.length) ns.blocks = old.blocks;
+      const old = t.subtasks.find((o) => o.id === ns.id);  // match by ID, not name
+      if (old) {
+        if (old.blocks.length) ns.blocks = old.blocks;
+        ns.done = old.done;
+        ns.actualHours = old.actualHours;
+      }
     });
     t.name = name;
     t.subtasks = subtasks;
