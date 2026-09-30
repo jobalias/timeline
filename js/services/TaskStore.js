@@ -6,6 +6,7 @@ export class TaskStore {
   constructor() {
     this.tasks = this._loadLocal();
     this.listeners = [];
+    this.used_colors = [];
     this.drive = null;          // set via attachDrive()
     this.syncStatusFn = () => {}; // UI callback
     this._saveTimer = null;
@@ -95,6 +96,9 @@ export class TaskStore {
     const remote = await this.drive.load();
     if (remote && Array.isArray(remote)) {
       this.tasks = remote.map((t) => new Task(t));
+      for (const t of this.tasks) {
+        this.used_colors.push(t.color);
+      }
       this._saveLocal();
       this._notify();
       this._setStatus('synced');

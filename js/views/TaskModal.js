@@ -5,6 +5,7 @@ import { escapeHtml } from '../utils.js';
 export class TaskModal {
   constructor(store, googleCalendar, { onAfterSave = () => {} } = {}) {
     this.store = store;
+    this.used_colors = store.used_colors;
     this.gcal = googleCalendar;
     this.onAfterSave = onAfterSave;
     this.editingId = null;
@@ -100,7 +101,8 @@ export class TaskModal {
         if (!existingIds.has(s.id)) newSubtaskIndices.push(i);
       });
     } else {
-      const task = new Task({ name, subtasks });
+      const task = new Task({ name, subtasks, used_colors: this.used_colors });
+      this.used_colors.push(task.color); 
       this.store.add(task);
       savedId = task.id;
       newSubtaskIndices = task.subtasks.map((_, i) => i);
