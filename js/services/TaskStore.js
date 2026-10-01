@@ -1,4 +1,5 @@
 import { Task, PALETTE } from '../models/Task.js';
+import {_getSoonestDueDate } from '../utils.js';
 
 const STORAGE_KEY = 'taskGrid';
 
@@ -172,9 +173,22 @@ export class TaskStore {
   getSorted() {
     const isTaskDone = (t) =>
       t.subtasks.length > 0 && t.subtasks.every((s) => s.done);
-    return [...this.tasks].sort(
+    const soonestDueDate = (t) => {
+      return _getSoonestDueDate(t);
+    };
+
+    const sorted = [...this.tasks].sort(
       (a, b) => (isTaskDone(a) ? 1 : 0) - (isTaskDone(b) ? 1 : 0)
-    );
+    );``
+    return sorted.sort((a, b) => {
+      const aDue = soonestDueDate(a);
+      const bDue = soonestDueDate(b);
+      console.log('comparing', a.name, aDue, 'vs', b.name, bDue);
+      if (aDue && bDue) return aDue - bDue;
+      if (aDue) return -1;
+      if (bDue) return 1;
+      return 0;
+    });
   }
 
   // Remove blocks that have no matching Google event, and dedupe

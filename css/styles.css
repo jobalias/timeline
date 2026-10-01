@@ -1200,3 +1200,46 @@ input[type=text], input[type=date], input[type=time], input[type=number] {
   color: #cf222e;
   font-weight: 700;
 }
+
+/* ===== Due Today emphasis ===== */
+
+/* Grid: subtask row */
+.subtask-name.due-today {
+  background: rgba(255, 59, 48, 0.08);
+}
+.due-today-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #ff3b30;
+  padding: 2px 8px;
+  border-radius: 6px;
+  animation: due-pulse 1.5s ease-in-out infinite;
+}
+
+/* Planner: backlog card */
+.backlog-card.due-today {
+  border: 2px solid #ff3b30;
+  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.15);
+}
+.backlog-card.due-today.selected {
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 5px rgba(255, 59, 48, 0.2);
+}
+.card-due.due-today-text {
+  color: #ff3b30;
+  font-weight: 700;
+}
+
+/* Planner: calendar block */
+.fc-event.block-due-today {
+  box-shadow: 0 0 0 2px #ff3b30 !important;
+  animation: due-pulse 1.5s ease-in-out infinite;
+}
+
+/* Pulse animation */
+@keyframes due-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}

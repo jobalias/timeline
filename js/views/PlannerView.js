@@ -1,4 +1,4 @@
-import { startOfDay, sameDay } from '../utils.js';
+import { startOfDay, sameDay, _isDueToday } from '../utils.js';
 import { TimeBlock } from '../models/Subtask.js';
 
 export class PlannerView {
@@ -199,14 +199,16 @@ export class PlannerView {
           if (end < rangeStart || start > rangeEnd) return;
 
           const selected = this._isSelected(task.id, subIndex);
+          const dueToday = !st.done && st.due && _isDueToday(st);
           events.push({
             id: b.eventId || `block-${task.id}-${subIndex}-${blockIndex}`,
             title: st.name,
             start, end,
             backgroundColor: task.color,
-            borderColor: task.color,
+            borderColor: dueToday ? '#ff3b30' : task.color, // red border if due today
             textColor: '#fff',
             editable: selected && !st.done,
+            classNames: dueToday ? ['block-due-today'] : [],
             extendedProps: {
               kind: 'block', taskId: task.id, taskName: task.name,
               subIndex, blockIndex, done: st.done, eventId: b.eventId,
@@ -479,6 +481,10 @@ async _onEventChanged(info) {
       const bPop = b.isPopped ? 0 : 1;
       if (aPop !== bPop) return aPop - bPop;
 
+      const aDue = _isDueToday(a.st) ? true : false;
+      const bDue = _isDueToday(b.st) ? true : false;
+      if (aDue !== bDue) return aDue ? -1 : 1;
+
       // 2. not-fully-allocated (needs time) before fully-allocated
       const aNeeds = a.remaining > 0 ? 0 : 1;
       const bNeeds = b.remaining > 0 ? 0 : 1;
@@ -511,6 +517,9 @@ async _onEventChanged(info) {
     card.style.borderTopColor = task.color;
     if (this._isSelected(task.id, subIndex)) card.classList.add('selected');
 
+    const dueToday = !st.done && st.due && _isDueToday(st);
+    if (dueToday) card.classList.add('due-today');
+
     const est = st.estHoursNum;
     const remaining = est - st.allocatedHours;
     let statusHtml;
@@ -518,7 +527,9 @@ async _onEventChanged(info) {
     else if (remaining > 0) statusHtml = `<span class="card-status pending">${remaining}h left</span>`;
     else statusHtml = `<span class="card-status scheduled">✓ scheduled</span>`;
 
-    const dueHtml = st.due ? `<span class="card-due">Due ${this._fmtDue(st.due)}</span>` : '';
+    const dueHtml = dueToday
+      ? `<span class="card-due due-today-text">⚠️ Due today</span>`
+      : (st.due ? `<span class="card-due">Due ${this._fmtDue(st.due)}</span>` : '');
 
     card.innerHTML = `
       <div class="card-task" style="color:${task.color};">${this._esc(task.name)}</div>

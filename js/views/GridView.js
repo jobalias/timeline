@@ -1,5 +1,5 @@
 import { DAYS_SHOWN, WINDOW_LOOKBACK } from '../config.js';
-import { startOfDay, sameDay, parseYmd, escapeHtml } from '../utils.js';
+import { startOfDay, sameDay, parseYmd, escapeHtml, _isDueToday} from '../utils.js';
 
 export class GridView {
   constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone }) {
@@ -130,10 +130,12 @@ export class GridView {
   }
 
   _renderSubtaskRow(task, st, si, days, today) {
+    const dueToday = !st.done && st.due && _isDueToday(st);
     const est = st.estHours ? ` (${st.estHours}h)` : '';
-    const rowCls = st.done ? 'subtask-name subtask-done' : 'subtask-name';
-
-    // clock button state
+    const rowCls = st.done ? 'subtask-name subtask-done'
+      : (dueToday ? 'subtask-name due-today' : 'subtask-name');
+    
+      // clock button state
     const clockCls = st.done
       ? 'sched-btn clock-done'
       : (st.remainingHours > 0 ? 'sched-btn clock-pending' : 'sched-btn clock-full');
@@ -152,6 +154,11 @@ export class GridView {
       statusHtml = '';
     }
 
+    // add an urgent badge for due-today
+    const dueBadge = dueToday
+      ? '<span class="due-today-badge">⚠️ Due today</span>'
+      : '';
+
     let html = `<tr><td class="label-col ${rowCls}"
         style="border-left:4px solid ${task.color};">
         <span class="st-left">
@@ -161,6 +168,7 @@ export class GridView {
           <span class="st-label">
             ${escapeHtml(st.name)}${est}
             ${statusHtml}
+            ${dueBadge}
           </span>
         </span>
         <button class="${clockCls}" data-task-id="${task.id}"
