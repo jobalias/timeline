@@ -5,11 +5,12 @@ const STORAGE_KEY = 'taskGrid';
 
 export class TaskStore {
   constructor() {
-    this.tasks = this._loadLocal();
+    this.completionLog = [];        
+    this.tasks = this._loadLocal(); 
     this.listeners = [];
     this.used_colors = [];
-    this.drive = null;          // set via attachDrive()
-    this.syncStatusFn = () => {}; // UI callback
+    this.drive = null;
+    this.syncStatusFn = () => {};
     this._saveTimer = null;
   }
 
@@ -95,9 +96,15 @@ export class TaskStore {
     if (!this.drive) { this._setStatus('offline'); return; }
     this._setStatus('saving');
     const remote = await this.drive.load();
-    if (remote && Array.isArray(remote)) {
-      this.tasks = remote.map((t) => new Task(t));
+
+    if (remote) {
+      // backward compat: old = array; new = { tasks, completionLog }
+      const taskArray = Array.isArray(remote) ? remote : (remote.tasks || []);
+      this.completionLog = Array.isArray(remote) ? [] : (remote.completionLog || []);
+
+      this.tasks = taskArray.map((t) => new Task(t));
       let colorIndex = 0;
+      this.used_colors = [];
       for (const t of this.tasks) {
         t.color = PALETTE[colorIndex % PALETTE.length];
         this.used_colors.push(t.color);
@@ -107,20 +114,29 @@ export class TaskStore {
       this._notify();
       this._setStatus('synced');
     } else {
-      await this._saveRemote(); // creates the file; sets status
+      await this._saveRemote();
     }
   }
 
   // ---------- persistence ----------
   _loadLocal() {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    return raw.map((t) => new Task(t));
+    // backward compat: old format = array of tasks; new format = { tasks, completionLog }
+    if (Array.isArray(raw)) {
+      this.completionLog = []; // will be set after constructor; see note below
+      return raw.map((t) => new Task(t));
+    }
+    this.completionLog = raw.completionLog || [];
+    return (raw.tasks || []).map((t) => new Task(t));
   }
 
   _saveLocal() {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify(this.tasks.map((t) => t.toJSON()))
+      JSON.stringify({
+        tasks: this.tasks.map((t) => t.toJSON()),
+        completionLog: this.completionLog,
+      })
     );
   }
 
@@ -130,7 +146,10 @@ export class TaskStore {
       return;
     }
     this._setStatus('saving');
-    const ok = await this.drive.save(this.tasks.map((t) => t.toJSON()));
+    const ok = await this.drive.save({
+      tasks: this.tasks.map((t) => t.toJSON()),
+      completionLog: this.completionLog,
+    });
     this._setStatus(ok ? 'synced' : 'failed');
   }
 
@@ -149,8 +168,8 @@ export class TaskStore {
   }
 
   // Save locally immediately, debounce the Drive save
-    _save() {
-        this._saveLocal();
+  _save() {
+    this._saveLocal();
         this._notify();
 
         // immediately show we have unsaved changes
@@ -183,7 +202,6 @@ export class TaskStore {
     return sorted.sort((a, b) => {
       const aDue = soonestDueDate(a);
       const bDue = soonestDueDate(b);
-      console.log('comparing', a.name, aDue, 'vs', b.name, bDue);
       if (aDue && bDue) return aDue - bDue;
       if (aDue) return -1;
       if (bDue) return 1;
@@ -368,5 +386,32 @@ export class TaskStore {
     }
     this.tasks = this.tasks.filter((x) => x.id !== id);
     this._save();
+  }
+
+    // Log a completed subtask (one entry per subtask; updates if re-completed)
+  logCompletion({ taskName, subtaskName, subtaskId, hoursSpent }) {
+    const entry = {
+      subtaskId,                       // unique key to avoid duplicates
+      taskName,
+      subtaskName,
+      hoursSpent,
+      completedAt: new Date().toISOString(),
+    };
+
+    // if this subtask was already logged, update it (re-completion)
+    const existingIdx = this.completionLog.findIndex(
+      (e) => e.subtaskId === subtaskId
+    );
+    if (existingIdx >= 0) {
+      this.completionLog[existingIdx] = entry;
+    } else {
+      this.completionLog.push(entry);
+    }
+
+    this._save();
+  }
+
+  getCompletionLog() {
+    return this.completionLog;
   }
 }

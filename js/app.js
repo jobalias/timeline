@@ -9,6 +9,7 @@ import { DayView } from './views/DayView.js';
 import { Settings } from './services/Settings.js';
 import { CalendarPicker } from './views/CalendarPicker.js';
 import { PlannerView } from './views/PlannerView.js';
+import { ProgressView } from './views/ProgressView.js';
 
 class App {
   constructor() {
@@ -20,6 +21,7 @@ class App {
     this.store.attachDrive(this.drive);
     this.dayView = new DayView(this.store, this.gcal);
     this.plannerView = new PlannerView(this.store, this.gcal, this.settings);
+    this.progressView = new ProgressView(this.store);
 
     // sync status → toolbar
     const syncEl = document.getElementById('syncStatus');
@@ -107,6 +109,7 @@ class App {
       this.grid.render();
       this.dayView.render();
       this.plannerView.refresh();
+      this.progressView.refresh();
     });
 
     // start Google (will auto-restore session if a token is saved)
@@ -245,6 +248,16 @@ class App {
     }
 
     await this.store.completeSubtask(taskId, subIndex, actual, scope, this.gcal);
+
+    const loggedTask = this.store.find(taskId);
+    const loggedSt = loggedTask.subtasks[subIndex];
+    this.store.logCompletion({
+      taskName: loggedTask.name,
+      subtaskName: loggedSt.name,
+      subtaskId: loggedSt.id,
+      hoursSpent: actual,
+    });
+    console.log('Logged completion:', loggedSt.name); 
   }
 
   // ==================== Sequential scheduling ====================
@@ -297,33 +310,39 @@ class App {
   }
 
   _bindTabs() {
-      const tabGrid = document.getElementById('tabGrid');
-      const tabPlanner = document.getElementById('tabPlanner');
-      const gridContainer = document.getElementById('gridViewContainer');
-      const plannerContainer = document.getElementById('plannerViewContainer');
-      const addTaskBtn = document.getElementById('plannerAddTaskBtn');
-      const refreshBtn = document.getElementById('plannerRefreshBtn');
+    const tabGrid = document.getElementById('tabGrid');
+    const tabPlanner = document.getElementById('tabPlanner');
+    const tabProgress = document.getElementById('tabProgress');
+    const gridC = document.getElementById('gridViewContainer');
+    const planC = document.getElementById('plannerViewContainer');
+    const progC = document.getElementById('progressViewContainer');
 
-      refreshBtn.addEventListener('click', () => this._reconcile());
-      addTaskBtn.addEventListener('click', () => this.taskModal.openNew());
-      
-      tabGrid.addEventListener('click', () => {
-        tabGrid.classList.add('active');
-        tabPlanner.classList.remove('active');
-        gridContainer.style.display = 'block';
-        plannerContainer.style.display = 'none';
-        this.plannerView.deactivate();
+    const show = (which) => {
+      [tabGrid, tabPlanner, tabProgress].forEach((t) => t.classList.remove('active'));
+      [gridC, planC, progC].forEach((c) => (c.style.display = 'none'));
+      this.plannerView.deactivate();
+      this.progressView.deactivate();
+
+      if (which === 'grid') {
+        tabGrid.classList.add('active'); gridC.style.display = 'block';
         this.grid.render();
-      });
-
-      tabPlanner.addEventListener('click', () => {
-        tabPlanner.classList.add('active');
-        tabGrid.classList.remove('active');
-        gridContainer.style.display = 'none';
-        plannerContainer.style.display = 'block';
+      } else if (which === 'planner') {
+        tabPlanner.classList.add('active'); planC.style.display = 'block';
         this.plannerView.activate();
-      });
-    }
+      } else {
+        tabProgress.classList.add('active'); progC.style.display = 'block';
+        this.progressView.activate();
+      }
+    };
+
+    tabGrid.addEventListener('click', () => show('grid'));
+    tabPlanner.addEventListener('click', () => show('planner'));
+    tabProgress.addEventListener('click', () => show('progress'));
+
+    // reuse for plannerAddTask etc. if needed
+    document.getElementById('plannerAddTaskBtn')
+      ?.addEventListener('click', () => this.taskModal.openNew());
+  }
 
   async _discardTask(taskId) {
     const task = this.store.find(taskId);

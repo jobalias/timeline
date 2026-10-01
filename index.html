@@ -30,6 +30,7 @@
     <div class="view-tabs">
       <button class="view-tab active" id="tabGrid">📊 Grid</button>
       <button class="view-tab" id="tabPlanner">🗓️ Planner</button>
+      <button class="view-tab" id="tabProgress">🌱 Progress</button>
     </div>
 
     <!-- ===== GRID VIEW ===== -->
@@ -89,7 +90,20 @@
         </div>
       </div>
     </div>
+
+  <!-- ===== PROGRESS VIEW ===== -->
+    <div id="progressViewContainer" style="display:none;">
+      <div class="progress-toolbar">
+        <button id="progPrev">←</button>
+        <div class="progress-week-label" id="progWeekLabel">This Week</div>
+        <button id="progNext">→</button>
+        <button id="progThisWeek">Today</button>
+      </div>
+      <div class="progress-week" id="progressWeek"></div>
+    </div>
+
   </div>
+
 
   <!-- ============ Add/Edit Task Modal ============ -->
   <div class="modal-backdrop" id="taskModalBackdrop">
