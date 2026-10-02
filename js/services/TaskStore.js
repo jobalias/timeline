@@ -6,7 +6,7 @@ const STORAGE_KEY = 'taskGrid';
 export class TaskStore {
   constructor() {
     this.completionLog = [];        
-    this.tasks = this._loadLocal(); 
+    this.tasks = this._loadLocal();
     this.listeners = [];
     this.used_colors = [];
     this.drive = null;
@@ -96,13 +96,19 @@ export class TaskStore {
     if (!this.drive) { this._setStatus('offline'); return; }
     this._setStatus('saving');
     const remote = await this.drive.load();
-
+    console.log('📁 DRIVE FILE CONTENTS:', JSON.stringify(remote, null, 2)); // ← temp
     if (remote) {
-      // backward compat: old = array; new = { tasks, completionLog }
-      const taskArray = Array.isArray(remote) ? remote : (remote.tasks || []);
-      this.completionLog = Array.isArray(remote) ? [] : (remote.completionLog || []);
-
+      let taskArray, log;
+      if (Array.isArray(remote)) {
+        taskArray = remote; log = [];
+      } else if (remote && typeof remote === 'object') {
+        taskArray = remote.tasks || []; log = remote.completionLog || [];
+      } else {
+        this._setStatus('synced'); return;
+      }
       this.tasks = taskArray.map((t) => new Task(t));
+      this.completionLog = log;
+
       let colorIndex = 0;
       this.used_colors = [];
       for (const t of this.tasks) {
@@ -114,37 +120,29 @@ export class TaskStore {
       this._notify();
       this._setStatus('synced');
     } else {
-      await this._saveRemote();
+      if (this.tasks.length > 0) await this._saveRemote();
+      else this._setStatus('synced');
     }
   }
 
   // ---------- persistence ----------
   _loadLocal() {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    // backward compat: old format = array of tasks; new format = { tasks, completionLog }
-    if (Array.isArray(raw)) {
-      this.completionLog = []; // will be set after constructor; see note below
-      return raw.map((t) => new Task(t));
-    }
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if (!raw) { this.completionLog = []; return []; }
+    if (Array.isArray(raw)) { this.completionLog = []; return raw.map((t) => new Task(t)); }
     this.completionLog = raw.completionLog || [];
     return (raw.tasks || []).map((t) => new Task(t));
   }
 
   _saveLocal() {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        tasks: this.tasks.map((t) => t.toJSON()),
-        completionLog: this.completionLog,
-      })
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      tasks: this.tasks.map((t) => t.toJSON()),
+      completionLog: this.completionLog,
+    }));
   }
 
   async _saveRemote() {
-    if (!this.drive || !this.drive.isReady) {
-      this._setStatus('offline');
-      return;
-    }
+    if (!this.drive || !this.drive.isReady) { this._setStatus('offline'); return; }
     this._setStatus('saving');
     const ok = await this.drive.save({
       tasks: this.tasks.map((t) => t.toJSON()),
@@ -389,12 +387,13 @@ export class TaskStore {
   }
 
     // Log a completed subtask (one entry per subtask; updates if re-completed)
-  logCompletion({ taskName, subtaskName, subtaskId, hoursSpent }) {
+  logCompletion({ taskName, subtaskName, subtaskId, hoursSpent, expectedHours }) {
     const entry = {
       subtaskId,                       // unique key to avoid duplicates
       taskName,
       subtaskName,
       hoursSpent,
+      expectedHours,
       completedAt: new Date().toISOString(),
     };
 

@@ -256,6 +256,7 @@ class App {
       subtaskName: loggedSt.name,
       subtaskId: loggedSt.id,
       hoursSpent: actual,
+      expectedHours: loggedSt.estHours,
     });
     console.log('Logged completion:', loggedSt.name); 
   }
