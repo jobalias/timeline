@@ -387,17 +387,17 @@ export class TaskStore {
   }
 
     // Log a completed subtask (one entry per subtask; updates if re-completed)
-  logCompletion({ taskName, subtaskName, subtaskId, hoursSpent, expectedHours }) {
+  logCompletion({ taskName, subtaskName, subtaskId, hoursSpent, taskId, taskJustCompleted }) {
     const entry = {
-      subtaskId,                       // unique key to avoid duplicates
+      subtaskId,
+      taskId,
       taskName,
       subtaskName,
       hoursSpent,
-      expectedHours,
+      taskJustCompleted: !!taskJustCompleted, // was this the last subtask?
       completedAt: new Date().toISOString(),
     };
 
-    // if this subtask was already logged, update it (re-completion)
     const existingIdx = this.completionLog.findIndex(
       (e) => e.subtaskId === subtaskId
     );

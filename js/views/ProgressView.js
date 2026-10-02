@@ -44,7 +44,6 @@ export class ProgressView {
   render() {
     if (!this.isActive) return;
 
-    // update the week label
     const weekEnd = new Date(this.weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
     const isThisWeek = this._sameWeek(this.weekStart, this._mondayOf(new Date()));
@@ -53,7 +52,6 @@ export class ProgressView {
       ? 'This Week'
       : `${fmt(this.weekStart)} – ${fmt(weekEnd)}`;
 
-    // build the 7 day columns
     const log = this.store.getCompletionLog();
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const today = startOfDay(new Date());
@@ -64,7 +62,7 @@ export class ProgressView {
       const day = new Date(this.weekStart);
       day.setDate(day.getDate() + i);
 
-      // completions logged on this day
+      // entries completed this day
       const dayEntries = log.filter((e) => {
         const c = new Date(e.completedAt);
         return c.getFullYear() === day.getFullYear() &&
@@ -76,31 +74,20 @@ export class ProgressView {
       col.className = 'prog-day';
       if (sameDay(day, today)) col.classList.add('prog-today');
 
-      const count = dayEntries.length;
       const header = `
         <div class="prog-day-header">
           <div class="prog-dow">${dayNames[i]}</div>
           <div class="prog-date">${day.getDate()}</div>
         </div>`;
 
-      let body;
-      if (count === 0) {
+      let body = '';
+      if (dayEntries.length === 0) {
         body = `<div class="prog-empty"></div>`;
       } else {
-        const chips = dayEntries.map((e) => `
-          <div class="prog-chip">
-            <div class="prog-chip-check">✓</div>
-            <div class="prog-chip-text">
-              <div class="prog-chip-sub">${this._esc(e.subtaskName)}</div>
-              <div class="prog-chip-task">${this._esc(e.taskName)}${
-                e.hoursSpent ? ` · ${e.hoursSpent}h` : ''
-              }</div>
-            </div>
-          </div>`).join('');
-        body = `<div class="prog-chips">${chips}</div>`;
+        body = `<div class="prog-items">${this._renderDayEntries(dayEntries)}</div>`;
       }
 
-      // little celebratory footer if things got done
+      const count = dayEntries.length;
       const footer = count > 0
         ? `<div class="prog-count">${count} done 🎉</div>`
         : '';
@@ -109,8 +96,56 @@ export class ProgressView {
       this.weekEl.appendChild(col);
     }
 
-    // weekly total
     this._renderWeekSummary(log);
+  }
+
+  // Render a day's entries: celebration cards for completed tasks, chips for the rest
+  _renderDayEntries(entries) {
+    // group entries by taskId
+    const byTask = new Map();
+    entries.forEach((e) => {
+      const key = e.taskId || e.taskName; // fallback for old entries without taskId
+      if (!byTask.has(key)) byTask.set(key, []);
+      byTask.get(key).push(e);
+    });
+
+    let html = '';
+    byTask.forEach((taskEntries) => {
+      // did this task get fully completed on this day?
+      const celebrated = taskEntries.some((e) => e.taskJustCompleted);
+      const taskName = taskEntries[0].taskName;
+
+      if (celebrated) {
+        // CELEBRATION card — task complete, subtasks as bullets
+        const bullets = taskEntries.map((e) =>
+          `<li>${this._esc(e.subtaskName)}${
+            e.hoursSpent ? ` <span class="prog-hours">· ${e.hoursSpent}h</span>` : ''
+          }</li>`
+        ).join('');
+
+        html += `
+          <div class="prog-task-complete">
+            <div class="prog-tc-header">${this._esc(taskName)}</div>
+            <ul class="prog-tc-list">${bullets}</ul>
+          </div>`;
+      } else {
+        // normal: individual subtask chips (not fully complete)
+        taskEntries.forEach((e) => {
+          html += `
+            <div class="prog-chip">
+              <div class="prog-chip-check">✓</div>
+              <div class="prog-chip-text">
+                <div class="prog-chip-sub">${this._esc(e.subtaskName)}</div>
+                <div class="prog-chip-task">${this._esc(e.taskName)}${
+                  e.hoursSpent ? ` · ${e.hoursSpent}h` : ''
+                }</div>
+              </div>
+            </div>`;
+        });
+      }
+    });
+
+    return html;
   }
 
   _renderWeekSummary(log) {

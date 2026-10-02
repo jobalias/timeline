@@ -209,8 +209,6 @@ class App {
   // ==================== Complete / Un-complete ====================
   async _handleToggleDone(taskId, subIndex, checked) {
     if (!checked) {
-      // un-completing → reset; deleted blocks are dropped so the clock
-      // shows amber (needs scheduling) automatically
       this.store.uncompleteSubtask(taskId, subIndex);
       return;
     }
@@ -223,7 +221,7 @@ class App {
     );
 
     if (input === null) {
-      this.grid.render(); // uncheck the box
+      this.grid.render();
       return;
     }
     const actual = parseFloat(input);
@@ -233,7 +231,6 @@ class App {
       return;
     }
 
-    // ask what to do with calendar events (only if there are any + connected)
     let scope = 'none';
     const hasEvents = st.blocks.some((b) => b.eventId);
     if (hasEvents && this.gcal.isAuthed) {
@@ -249,16 +246,19 @@ class App {
 
     await this.store.completeSubtask(taskId, subIndex, actual, scope, this.gcal);
 
-    const loggedTask = this.store.find(taskId);
-    const loggedSt = loggedTask.subtasks[subIndex];
+    // check if the WHOLE task is now complete (re-fetch fresh references)
+    const t = this.store.find(taskId);
+    const completedSt = t.subtasks[subIndex];   // ← renamed from `st` to avoid redeclare
+    const taskJustCompleted = t.subtasks.every((s) => s.done);
+
     this.store.logCompletion({
-      taskName: loggedTask.name,
-      subtaskName: loggedSt.name,
-      subtaskId: loggedSt.id,
+      taskId: t.id,
+      taskName: t.name,
+      subtaskName: completedSt.name,            // ← use renamed var
+      subtaskId: completedSt.id,
       hoursSpent: actual,
-      expectedHours: loggedSt.estHours,
+      taskJustCompleted,
     });
-    console.log('Logged completion:', loggedSt.name); 
   }
 
   // ==================== Sequential scheduling ====================
