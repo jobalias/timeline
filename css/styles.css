@@ -1431,3 +1431,50 @@ input[type=text], input[type=date], input[type=time], input[type=number] {
   60% { transform: scale(1.04) rotate(1deg); }
   100% { transform: scale(1) rotate(0); opacity: 1; }
 }
+
+/* Horizontal scrolling day strip */
+.progress-week {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 12px;          /* room for scrollbar */
+  scroll-snap-type: x proximity; /* gentle snapping to days */
+  min-height: 55vh;
+}
+
+.prog-day {
+  flex: 0 0 160px;    /* fixed width per day column */
+  scroll-snap-align: start;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 200px;
+}
+
+/* nicer scrollbar */
+.progress-week::-webkit-scrollbar {
+  height: 10px;
+}
+.progress-week::-webkit-scrollbar-track {
+  background: #f0f0f4;
+  border-radius: 5px;
+}
+.progress-week::-webkit-scrollbar-thumb {
+  background: #c7c7cc;
+  border-radius: 5px;
+}
+.progress-week::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a8;
+}
+
+/* add month to the header */
+.prog-month {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+}

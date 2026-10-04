@@ -24,7 +24,6 @@ export function escapeHtml(s) {
 
 export function _isDueToday(st) {
   if (st.done || !st.due) {
-    console.log(st.name, 'is done or has no due date, so not due today');
     return false;
   }
   const today = new Date();

@@ -96,7 +96,7 @@ export class TaskStore {
     if (!this.drive) { this._setStatus('offline'); return; }
     this._setStatus('saving');
     const remote = await this.drive.load();
-    console.log('📁 DRIVE FILE CONTENTS:', JSON.stringify(remote, null, 2)); // ← temp
+
     if (remote) {
       let taskArray, log;
       if (Array.isArray(remote)) {
