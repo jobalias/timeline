@@ -3,6 +3,7 @@ import { GoogleCalendar } from './services/GoogleCalendar.js';
 import { GoogleDrive } from './services/GoogleDrive.js';
 import { GridView } from './views/GridView.js';
 import { TaskModal } from './views/TaskModal.js';
+import { NoteModal } from './views/NoteModal.js';
 import { CalendarView } from './views/CalendarView.js';
 import { DeleteDialog } from './views/DeleteDialog.js';
 import { DayView } from './views/DayView.js';
@@ -22,10 +23,12 @@ class App {
     this.dayView = new DayView(this.store, this.gcal);
     this.plannerView = new PlannerView(this.store, this.gcal, this.settings);
     this.progressView = new ProgressView(this.store);
-
+    this.noteModal = new NoteModal(this.store, {
+          onSaved: (saved) => this._onNoteSaved(saved), // Chunk 2 syncs to calendar
+        });
     // sync status → toolbar
     const syncEl = document.getElementById('syncStatus');
-// sync status → badge + warning banner
+    // sync status → badge + warning banner
     const badge = document.getElementById('syncBadge');
     const warning = document.getElementById('syncWarning');
     const warningText = document.getElementById('syncWarningText');
@@ -87,14 +90,21 @@ class App {
 
     this.grid = new GridView(this.store, {
       onEditTask: (id) => this.taskModal.openEdit(id),
-      onDeleteTask: (id) => this._confirmDelete(id),
+      onDeleteTask: (id) => this._handleDeleteTask(id),
       onSchedule: (taskId, subIndex) => {
-        this._schedQueue = []; // one-off, not a sequence
+        this._schedQueue = [];
         this.calendarView.open(taskId, subIndex);
       },
       onToggleDone: (taskId, subIndex, checked) =>
         this._handleToggleDone(taskId, subIndex, checked),
+      onOpenTaskNote: (taskId) => this.noteModal.openForTask(taskId),        // ← add
+      onOpenSubtaskNote: (taskId, subIndex) =>                               // ← add
+        this.noteModal.openForSubtask(taskId, subIndex),
     });
+
+    this.grid.onOpenTaskNote = (taskId) => this.noteModal.openForTask(taskId);
+    this.grid.onOpenSubtaskNote = (taskId, subIndex) =>
+    this.noteModal.openForSubtask(taskId, subIndex);
 
     // scheduling queue for multi-subtask sequences
     this._schedQueue = [];
@@ -356,6 +366,28 @@ class App {
       await this.store.removeTask(taskId, 'all', this.gcal); // deletes events + task
     } else {
       await this.store.removeTask(taskId, 'none', this.gcal); // just remove task
+    }
+  }
+
+  async _onNoteSaved(saved) {
+    // saved = { type, taskId, subIndex?, note }
+    if (saved.type !== 'subtask') return; // task notes are app-only
+
+    if (!this.gcal.isAuthed) return;
+
+    const task = this.store.find(saved.taskId);
+    if (!task) return;
+    const st = task.subtasks[saved.subIndex];
+    if (!st) return;
+
+    // write the note to every event's description for this subtask
+    for (const b of st.blocks) {
+      if (!b.eventId) continue;
+      try {
+        await this.gcal.updateEventDescription(b.eventId, saved.note);
+      } catch (e) {
+        console.warn('Failed to sync note to event:', e);
+      }
     }
   }
 }

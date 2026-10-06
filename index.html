@@ -122,6 +122,22 @@
     </div>
   </div>
 
+  <!-- ============ Note Popup ============ -->
+  <div class="modal-backdrop" id="noteBackdrop">
+    <div class="modal" style="width:min(460px,92vw)">
+      <h2 id="noteTitle">Note</h2>
+      <div id="noteContext" style="color:var(--muted);font-size:13px;margin:0 0 10px;"></div>
+      <textarea id="noteText" rows="8"
+        placeholder="Write a note…"
+        style="width:100%;resize:vertical;font-family:inherit;font-size:14px;
+               padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
+      <div class="modal-actions">
+        <button id="noteCancelBtn">Cancel</button>
+        <button class="primary" id="noteSaveBtn">Save note</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ Calendar Picker ============ -->
   <div class="modal-backdrop" id="calPickerBackdrop">
     <div class="modal" style="width:min(380px,92vw)">

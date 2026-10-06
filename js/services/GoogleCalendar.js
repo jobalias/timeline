@@ -131,10 +131,14 @@ toggleAuth() {
       const e = resp.result;
       if (e.status === 'cancelled') return null;
       if (!e.start || !e.start.dateTime) return null;
-      return { start: new Date(e.start.dateTime), end: new Date(e.end.dateTime) };
+      return {
+        start: new Date(e.start.dateTime),
+        end: new Date(e.end.dateTime),
+        description: e.description || '',   // ← add this
+      };
     } catch (err) {
       if (err.status === 404 || err.status === 410) return null;
-      if (this._handleApiError(err)) return null; // ← add
+      if (this._handleApiError && this._handleApiError(err)) return null;
       throw err;
     }
   }
@@ -157,6 +161,20 @@ toggleAuth() {
     } catch (err) {
       if (this._handleApiError(err)) return null; // ← add
       throw err;
+    }
+  }
+
+  async updateEventDescription(eventId, description) {
+    try {
+      await gapi.client.calendar.events.patch({
+        calendarId: 'primary',
+        eventId,
+        resource: { description: description || '' },
+      });
+    } catch (err) {
+      if (err.status === 404 || err.status === 410) return; // event gone
+      if (this._handleApiError && this._handleApiError(err)) return;
+      console.warn('Failed to update event description:', err);
     }
   }
 

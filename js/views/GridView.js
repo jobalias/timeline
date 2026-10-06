@@ -2,12 +2,15 @@ import { DAYS_SHOWN, WINDOW_LOOKBACK } from '../config.js';
 import { startOfDay, sameDay, parseYmd, escapeHtml, _isDueToday} from '../utils.js';
 
 export class GridView {
-  constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone }) {
+constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
+                       onOpenTaskNote, onOpenSubtaskNote }) {
     this.store = store;
     this.onEditTask = onEditTask;
     this.onDeleteTask = onDeleteTask;
     this.onSchedule = onSchedule;
     this.onToggleDone = onToggleDone;
+    this.onOpenTaskNote = onOpenTaskNote || (() => {});
+    this.onOpenSubtaskNote = onOpenSubtaskNote || (() => {});
     this.showCompleted = false;
     this.wrap = document.getElementById('gridWrap');
 
@@ -25,6 +28,36 @@ export class GridView {
       const schedBtn = e.target.closest('.sched-btn');
       if (schedBtn && !schedBtn.disabled) {
         this.onSchedule(schedBtn.dataset.taskId, parseInt(schedBtn.dataset.subIndex, 10));
+      }
+    });
+
+    // double-click anywhere on a task/subtask row → open note popup
+    this.wrap.addEventListener('dblclick', (e) => {
+      // ignore double-clicks on interactive controls
+      if (e.target.closest('.done-check') ||
+          e.target.closest('.sched-btn') ||
+          e.target.closest('.task-edit') ||
+          e.target.closest('.task-del')) {
+        return;
+      }
+
+      const labelCol = e.target.closest('.label-col');
+      if (!labelCol) return;
+
+      // subtask row? (has a checkbox with the IDs)
+      const check = labelCol.querySelector('.done-check');
+      if (check) {
+        this.onOpenSubtaskNote(
+          check.dataset.taskId,
+          parseInt(check.dataset.subIndex, 10)
+        );
+        return;
+      }
+
+      // task row? (.label-col with data-task-id but no checkbox)
+      const taskId = labelCol.dataset.taskId;
+      if (taskId) {
+        this.onOpenTaskNote(taskId);
       }
     });
 
@@ -101,8 +134,13 @@ export class GridView {
       if (allDone && !this.showCompleted) return;
 
       const taskCls = allDone ? 'task-name task-done' : 'task-name';
+      const taskNoteBadge = (task.note && task.note.trim())
+        ? '<span class="note-dot" title="Has a note"></span>'
+        : '';
+
       html += `<tr><td class="label-col ${taskCls}" data-task-id="${task.id}"
                  style="border-left:4px solid ${task.color};">
+                 ${taskNoteBadge}
                  <span class="task-title">${escapeHtml(task.name)}</span>
                  <span class="task-btns">
                    <button class="task-edit" data-task-id="${task.id}" title="Edit">✎</button>
@@ -159,8 +197,13 @@ export class GridView {
       ? '<span class="due-today-badge">⚠️ Due today</span>'
       : '';
 
-    let html = `<tr><td class="label-col ${rowCls}"
-        style="border-left:4px solid ${task.color};">
+    // note indicator
+    const noteBadge = (st.note && st.note.trim())
+      ? '<span class="note-dot" title="Has a note"></span>'
+      : '';
+
+    let html = `<tr><td class="label-col ${rowCls}" style="border-left:4px solid ${task.color};">
+        ${noteBadge}
         <span class="st-left">
           <input type="checkbox" class="done-check"
             data-task-id="${task.id}" data-sub-index="${si}"

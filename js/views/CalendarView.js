@@ -318,6 +318,7 @@ export class CalendarView {
         } else {
           const eventId = await this.gcal.createEvent({
             summary: `${task.name}: ${st.name}`,
+            description: st.note || '',       // ← include the note
             startDate: b.date, startTime: b.start, hours: b.hours,
           });
           b.eventId = eventId;

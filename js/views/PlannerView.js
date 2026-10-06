@@ -275,6 +275,7 @@ export class PlannerView {
       if (this.gcal.isAuthed) {
         const eventId = await this.gcal.createEvent({
           summary: `${task.name}: ${st.name}`,
+          description: st.note || '', 
           startDate: block.date, startTime: block.start, hours: block.hours,
         });
         block.eventId = eventId;

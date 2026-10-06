@@ -33,32 +33,28 @@ export class TaskStore {
     for (const task of this.tasks) {
       for (const st of task.subtasks) {
         const keptBlocks = [];
+        let descriptionFromCalendar = null; // track a description change
 
         for (const b of st.blocks) {
-          // No eventId → block isn't linked to any real event → remove it
           if (!b.eventId) {
             changed = true;
             continue;
           }
 
-          // Has eventId → check if the event still exists in Google
           let real;
           try {
             real = await googleCalendar.getEventById(b.eventId);
           } catch (e) {
-            // network error → keep block (don't lose data on a transient error)
             keptBlocks.push(b);
             continue;
           }
 
           if (real === null) {
-            // event was deleted in Google → remove the block
             changed = true;
             continue;
           }
 
-          // event exists → sync block to match (for incomplete subtasks)
-          // for done subtasks, just keep as-is (don't move completed history around)
+          // sync time (for incomplete subtasks)
           if (!st.done) {
             const newDate = this._ymdLocal(real.start);
             const newStart = this._hhmm(real.start);
@@ -72,10 +68,34 @@ export class TaskStore {
             }
           }
 
+          // capture a description that differs from the current note
+          const eventDesc = real.description || '';
+          if (eventDesc !== (st.note || '')) {
+            descriptionFromCalendar = eventDesc; // last differing one wins
+          }
+
           keptBlocks.push(b);
         }
 
         st.blocks = keptBlocks;
+
+        // if an event's description changed, update the subtask note
+        if (descriptionFromCalendar !== null &&
+            descriptionFromCalendar !== (st.note || '')) {
+          st.note = descriptionFromCalendar;
+          changed = true;
+
+          // re-sync the (new) note to ALL this subtask's events so they match
+          for (const b of st.blocks) {
+            if (b.eventId) {
+              try {
+                await googleCalendar.updateEventDescription(b.eventId, st.note);
+              } catch (e) {
+                console.warn('Failed to re-sync note to events:', e);
+              }
+            }
+          }
+        }
       }
     }
 
@@ -412,5 +432,21 @@ export class TaskStore {
 
   getCompletionLog() {
     return this.completionLog;
+  }
+
+  setTaskNote(taskId, note) {
+    const t = this.find(taskId);
+    if (!t) return;
+    t.note = note;
+    this._save();
+  }
+
+  setSubtaskNote(taskId, subIndex, note) {
+    const t = this.find(taskId);
+    if (!t) return;
+    const st = t.subtasks[subIndex];
+    if (!st) return;
+    st.note = note;
+    this._save();
   }
 }

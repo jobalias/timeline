@@ -82,17 +82,19 @@ export function nextColor(used_colors = null) {
 }
 
 export class Task {
-  constructor({ id = null, name = '', subtasks = [], used_colors = null, color = null } = {}) {
+  constructor({ id, name = '', subtasks = [], color = null, note = '' } = {}) {
     this.id = id || Date.now().toString();
     this.name = name;
-    this.color = color || nextColor(used_colors);
+    this.note = note;                     // ← add
     this.subtasks = subtasks.map((s) => new Subtask(s));
+    this.color = color || nextColor();
   }
 
   toJSON() {
     return {
       id: this.id,
       name: this.name,
+      note: this.note,                    // ← add
       color: this.color,
       subtasks: this.subtasks.map((s) => s.toJSON()),
     };
