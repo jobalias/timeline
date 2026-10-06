@@ -1494,10 +1494,40 @@ input[type=text], input[type=date], input[type=time], input[type=number] {
   position: absolute;
   top: 2px;
   left: 8px;
-  font-size: 11px;
+  width: 8px; height: 8px;
   opacity: 1.0;
   pointer-events: none;
 }
 .note-dot::before {
   content: '📝';
+}
+
+/* right-side action cluster */
+.st-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.ball-dot {
+  background: transparent;
+  border: none;
+  font-size: 12px;        /* smaller */
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+  opacity: 0.6;           /* muted */
+}
+.ball-dot:hover {
+  opacity: 1;
+  background: rgba(0,0,0,0.06);
+}
+
+/* Minimized (waiting) row — subtle dimming */
+.subtask-waiting {
+  opacity: 0.6;
+}
+.subtask-waiting .st-label {
+  font-style: italic;
 }

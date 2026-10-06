@@ -394,6 +394,15 @@ export class TaskStore {
     this._save();
   }
 
+  toggleWaiting(taskId, subIndex) {
+    const t = this.find(taskId);
+    if (!t) return;
+    const st = t.subtasks[subIndex];
+    if (!st) return;
+    st.waiting = !st.waiting;
+    this._save();
+  }
+  
   async removeTask(id, scope, googleCalendar) {
     const t = this.find(id);
     if (!t) return;

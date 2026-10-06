@@ -97,9 +97,12 @@ class App {
       },
       onToggleDone: (taskId, subIndex, checked) =>
         this._handleToggleDone(taskId, subIndex, checked),
-      onOpenTaskNote: (taskId) => this.noteModal.openForTask(taskId),        // ← add
-      onOpenSubtaskNote: (taskId, subIndex) =>                               // ← add
+      onOpenTaskNote: (taskId) => this.noteModal.openForTask(taskId),        
+      onOpenSubtaskNote: (taskId, subIndex) =>                               
         this.noteModal.openForSubtask(taskId, subIndex),
+      onToggleWaiting: (taskId, subIndex) => {
+        this.store.toggleWaiting(taskId, subIndex);
+      },
     });
 
     this.grid.onOpenTaskNote = (taskId) => this.noteModal.openForTask(taskId);

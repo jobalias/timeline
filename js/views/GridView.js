@@ -3,7 +3,7 @@ import { startOfDay, sameDay, parseYmd, escapeHtml, _isDueToday} from '../utils.
 
 export class GridView {
 constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
-                       onOpenTaskNote, onOpenSubtaskNote }) {
+                       onOpenTaskNote, onOpenSubtaskNote, onToggleWaiting }) {
     this.store = store;
     this.onEditTask = onEditTask;
     this.onDeleteTask = onDeleteTask;
@@ -13,7 +13,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     this.onOpenSubtaskNote = onOpenSubtaskNote || (() => {});
     this.showCompleted = false;
     this.wrap = document.getElementById('gridWrap');
-
+    this.onToggleWaiting = onToggleWaiting || (() => {});
     this.windowStart = startOfDay(new Date());
     this.windowStart.setDate(this.windowStart.getDate() - WINDOW_LOOKBACK);
 
@@ -28,6 +28,17 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       const schedBtn = e.target.closest('.sched-btn');
       if (schedBtn && !schedBtn.disabled) {
         this.onSchedule(schedBtn.dataset.taskId, parseInt(schedBtn.dataset.subIndex, 10));
+        return;
+      }
+
+      // ball-in-court toggle
+      const ballBtn = e.target.closest('.ball-dot');
+      if (ballBtn) {
+        this.onToggleWaiting(
+          ballBtn.dataset.taskId,
+          parseInt(ballBtn.dataset.subIndex, 10)
+        );
+        return;
       }
     });
 
@@ -37,7 +48,8 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       if (e.target.closest('.done-check') ||
           e.target.closest('.sched-btn') ||
           e.target.closest('.task-edit') ||
-          e.target.closest('.task-del')) {
+          e.target.closest('.task-del') ||
+          e.target.closest('.ball-dot')) {
         return;
       }
 
@@ -170,10 +182,13 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
   _renderSubtaskRow(task, st, si, days, today) {
     const dueToday = !st.done && st.due && _isDueToday(st);
     const est = st.estHours ? ` (${st.estHours}h)` : '';
+
+    const waiting = st.waiting;
     const rowCls = st.done ? 'subtask-name subtask-done'
-      : (dueToday ? 'subtask-name due-today' : 'subtask-name');
-    
-      // clock button state
+      : (dueToday ? 'subtask-name due-today' : 'subtask-name')
+      + (waiting ? ' subtask-waiting' : '');
+
+    // clock button state
     const clockCls = st.done
       ? 'sched-btn clock-done'
       : (st.remainingHours > 0 ? 'sched-btn clock-pending' : 'sched-btn clock-full');
@@ -192,30 +207,38 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       statusHtml = '';
     }
 
-    // add an urgent badge for due-today
     const dueBadge = dueToday
       ? '<span class="due-today-badge">⚠️ Due today</span>'
       : '';
 
-    // note indicator
     const noteBadge = (st.note && st.note.trim())
       ? '<span class="note-dot" title="Has a note"></span>'
       : '';
 
+    // small ball button — top-left, right of the note icon
+    // ball button — sits just left of the clock
+    const ballBtn = `<button class="ball-dot" data-task-id="${task.id}"
+      data-sub-index="${si}"
+      title="${waiting ? 'Ball in their court — click to restore' : 'Waiting on someone? Click to minimize'}">
+      ${waiting ? '🏓' : '🏐'}</button>`;
+
     let html = `<tr><td class="label-col ${rowCls}" style="border-left:4px solid ${task.color};">
         ${noteBadge}
         <span class="st-left">
-          <input type="checkbox" class="done-check"
+          ${waiting ? '' : `<input type="checkbox" class="done-check"
             data-task-id="${task.id}" data-sub-index="${si}"
-            ${st.done ? 'checked' : ''}>
+            ${st.done ? 'checked' : ''}>`}
           <span class="st-label">
-            ${escapeHtml(st.name)}${est}
-            ${statusHtml}
-            ${dueBadge}
+            ${escapeHtml(st.name)}${waiting ? '' : est}
+            ${waiting ? '' : statusHtml}
+            ${waiting ? '' : dueBadge}
           </span>
         </span>
-        <button class="${clockCls}" data-task-id="${task.id}"
-          data-sub-index="${si}" ${clockDisabled}>⏰</button>
+        <span class="st-right">
+          ${ballBtn}
+          ${waiting ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
+            data-sub-index="${si}" ${clockDisabled}>⏰</button>`}
+        </span>
       </td>`;
     html += this._renderSubtaskCells(st, days, today, task.color);
     html += '</tr>';
