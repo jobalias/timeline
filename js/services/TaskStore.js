@@ -294,8 +294,7 @@ export class TaskStore {
     const oldTaskName = t.name;
     const taskNameChanged = oldTaskName !== name;
 
-    // Track which subtasks were renamed (by ID) so we can update their events
-    const renamedSubtasks = []; // { subtask, oldName, newName }
+    const renamedSubtasks = [];
 
     subtasks.forEach((ns) => {
       const old = t.subtasks.find((o) => o.id === ns.id);
@@ -303,8 +302,9 @@ export class TaskStore {
         if (old.blocks.length) ns.blocks = old.blocks;
         ns.done = old.done;
         ns.actualHours = old.actualHours;
+        ns.note = old.note;          
+        ns.waiting = old.waiting;    
 
-        // detect subtask rename
         if (old.name !== ns.name) {
           renamedSubtasks.push({ subtask: ns, oldName: old.name, newName: ns.name });
         }
@@ -315,7 +315,6 @@ export class TaskStore {
     t.subtasks = subtasks;
     this._save();
 
-    // Update Google Calendar event titles for renamed items
     if (googleCalendar && googleCalendar.isAuthed) {
       await this._updateEventTitles(t, taskNameChanged, renamedSubtasks, googleCalendar);
     }
