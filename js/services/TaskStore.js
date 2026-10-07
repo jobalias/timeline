@@ -28,74 +28,71 @@ export class TaskStore {
   async reconcileWithCalendar(googleCalendar) {
     if (!googleCalendar || !googleCalendar.isAuthed) return false;
 
+    // Collect the date range of all blocks
+    let minDate = null, maxDate = null;
+    const allEventIds = new Set();
+    for (const task of this.tasks) {
+      for (const st of task.subtasks) {
+        for (const b of st.blocks) {
+          if (b.eventId) allEventIds.add(b.eventId);
+          if (b.date) {
+            const d = new Date(b.date + 'T00:00:00');
+            if (!minDate || d < minDate) minDate = d;
+            if (!maxDate || d > maxDate) maxDate = d;
+          }
+        }
+      }
+    }
+
+    if (!minDate) return false; // no blocks
+
+    // widen range a bit
+    minDate.setDate(minDate.getDate() - 1);
+    maxDate.setDate(maxDate.getDate() + 2);
+
+    // ONE batch fetch instead of per-block
+    let events;
+    try {
+      events = await googleCalendar.getEvents(minDate, maxDate, ['primary']);
+    } catch (e) {
+      console.warn('Reconcile batch fetch failed', e);
+      return false;
+    }
+
+    // build a lookup: eventId → event
+    const eventMap = new Map();
+    events.forEach((ev) => eventMap.set(ev.id, ev));
+
     let changed = false;
 
     for (const task of this.tasks) {
       for (const st of task.subtasks) {
         const keptBlocks = [];
-        let descriptionFromCalendar = null; // track a description change
-
         for (const b of st.blocks) {
-          if (!b.eventId) {
-            changed = true;
-            continue;
-          }
+          if (!b.eventId) { changed = true; continue; }
 
-          let real;
-          try {
-            real = await googleCalendar.getEventById(b.eventId);
-          } catch (e) {
+          const real = eventMap.get(b.eventId);
+          if (!real) {
+            // not in range fetch — could be deleted OR out of range
+            // to be safe, keep it (don't delete based on range miss)
             keptBlocks.push(b);
             continue;
           }
 
-          if (real === null) {
-            changed = true;
-            continue;
-          }
-
-          // sync time (for incomplete subtasks)
           if (!st.done) {
             const newDate = this._ymdLocal(real.start);
             const newStart = this._hhmm(real.start);
             const newHours = (real.end - real.start) / 3600000;
             if (b.date !== newDate || b.start !== newStart ||
                 Math.abs(b.hoursNum - newHours) > 0.001) {
-              b.date = newDate;
-              b.start = newStart;
+              b.date = newDate; b.start = newStart;
               b.hours = Math.round(newHours * 100) / 100;
               changed = true;
             }
           }
-
-          // capture a description that differs from the current note
-          const eventDesc = real.description || '';
-          if (eventDesc !== (st.note || '')) {
-            descriptionFromCalendar = eventDesc; // last differing one wins
-          }
-
           keptBlocks.push(b);
         }
-
         st.blocks = keptBlocks;
-
-        // if an event's description changed, update the subtask note
-        if (descriptionFromCalendar !== null &&
-            descriptionFromCalendar !== (st.note || '')) {
-          st.note = descriptionFromCalendar;
-          changed = true;
-
-          // re-sync the (new) note to ALL this subtask's events so they match
-          for (const b of st.blocks) {
-            if (b.eventId) {
-              try {
-                await googleCalendar.updateEventDescription(b.eventId, st.note);
-              } catch (e) {
-                console.warn('Failed to re-sync note to events:', e);
-              }
-            }
-          }
-        }
       }
     }
 

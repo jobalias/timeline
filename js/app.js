@@ -117,12 +117,15 @@ class App {
     this._bindAuth();
     this._bindLogin();
     this._bindTabs();
-    // re-render grid whenever data changes
     this.store.subscribe(() => {
-      this.grid.render();
-      this.dayView.render();
-      this.plannerView.refresh();
-      this.progressView.refresh();
+      if (this.activeView === 'grid') {
+        this.grid.render();
+        this.dayView.render();
+      } else if (this.activeView === 'planner') {
+        this.plannerView.refresh();
+      } else if (this.activeView === 'progress') {
+        this.progressView.refresh();
+      }
     });
 
     // start Google (will auto-restore session if a token is saved)
@@ -336,7 +339,7 @@ class App {
       [gridC, planC, progC].forEach((c) => (c.style.display = 'none'));
       this.plannerView.deactivate();
       this.progressView.deactivate();
-
+      this.activeView = which;
       if (which === 'grid') {
         tabGrid.classList.add('active'); gridC.style.display = 'block';
         this.grid.render();

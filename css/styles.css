@@ -43,6 +43,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 8px;
   max-height: 75vh;         /* add this so it matches the day view height */
 }
+.grid-wrap td, .grid-wrap th {
+  contain: layout style;
+}
 table { border-collapse: collapse; }
 th, td { text-align: center; font-size: 12px; white-space: nowrap; }
 .label-col {

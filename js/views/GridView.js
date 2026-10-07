@@ -16,6 +16,8 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     this.onToggleWaiting = onToggleWaiting || (() => {});
     this.windowStart = startOfDay(new Date());
     this.windowStart.setDate(this.windowStart.getDate() - WINDOW_LOOKBACK);
+    this.isMobile = window.innerWidth < 768;
+    this.effectiveDays = this.isMobile ? 10 : DAYS_SHOWN;
 
     // click handling (edit / delete / schedule)
     this.wrap.addEventListener('click', (e) => {
@@ -91,8 +93,15 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     }
 
     // reposition month labels on horizontal scroll
-    this.wrap.addEventListener('scroll', () => this._updateStickyMonths());
-  }
+    let scrollScheduled = false;
+    this.wrap.addEventListener('scroll', () => {
+      if (scrollScheduled) return;
+      scrollScheduled = true;
+      requestAnimationFrame(() => {
+        this._updateStickyMonths();
+        scrollScheduled = false;
+      });
+    }, { passive: true });  }
 
   render() {
     const tasks = this.store.getSorted();
@@ -247,7 +256,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
 
   _buildDays() {
     const days = [];
-    for (let i = 0; i < DAYS_SHOWN; i++) {
+    for (let i = 0; i < this.effectiveDays; i++) {
       const d = new Date(this.windowStart);
       d.setDate(d.getDate() + i);
       days.push(d);
@@ -289,40 +298,40 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
   _updateStickyMonths() {
     const scrollLeft = this.wrap.scrollLeft;
     const wrapWidth = this.wrap.clientWidth;
-
     const labelCol = this.wrap.querySelector('.label-col');
     const labelWidth = labelCol ? labelCol.offsetWidth : 0;
-
     const viewLeft = scrollLeft + labelWidth;
     const viewRight = scrollLeft + wrapWidth;
 
     const monthHeads = this.wrap.querySelectorAll('.month-head');
+
+    // READ phase — gather all measurements first
+    const measurements = [];
     monthHeads.forEach((th) => {
       const label = th.querySelector('.month-label');
       if (!label) return;
+      measurements.push({
+        label,
+        thLeft: th.offsetLeft,
+        thWidth: th.offsetWidth,
+        labelW: label.offsetWidth,
+      });
+    });
 
-      const thLeft = th.offsetLeft;
-      const thRight = thLeft + th.offsetWidth;
-      const labelW = label.offsetWidth;
-
-      // fully off-screen → reset
+    // WRITE phase — apply transforms (no interleaved reads)
+    measurements.forEach(({ label, thLeft, thWidth, labelW }) => {
+      const thRight = thLeft + thWidth;
       if (thRight <= viewLeft || thLeft >= viewRight) {
         label.style.transform = 'translateX(0)';
         return;
       }
-
-      // visible slice of this month (excluding the frozen label column)
       const visStart = Math.max(thLeft, viewLeft);
       const visEnd = Math.min(thRight, viewRight);
       const visCenterInCell = (visStart + visEnd) / 2 - thLeft;
-
       let offset = visCenterInCell - labelW / 2;
-
-      const minOffset = 0;
-      const maxOffset = th.offsetWidth - labelW;
-      if (offset < minOffset) offset = minOffset;
+      const maxOffset = thWidth - labelW;
+      if (offset < 0) offset = 0;
       if (offset > maxOffset) offset = Math.max(0, maxOffset);
-
       label.style.transform = `translateX(${offset}px)`;
     });
   }
