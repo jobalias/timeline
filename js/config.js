@@ -16,7 +16,7 @@ export const DISCOVERY_DOCS = [
 
 export const DISCOVERY_DOC = DISCOVERY_DOCS[0];
 
-export const DAYS_SHOWN = 100;
-export const WINDOW_LOOKBACK = 2; // days shown before today
+export const DAYS_SHOWN = 30;
+export const WINDOW_LOOKBACK = 20; // days shown before today
 
 // ====================================================

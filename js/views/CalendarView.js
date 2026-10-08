@@ -35,18 +35,21 @@ export class CalendarView {
   async open(taskId, subIndex, opts = {}) {
     this.context = { taskId, subIndex };
     this._inCreationSequence = !!opts.sequence;
-    this.context = { taskId, subIndex };
     const task = this.store.find(taskId);
     const st = task.subtasks[subIndex];
 
-    // Title shows: Task name → Subtask name (with hours)
     const est = st.estHours ? ` — ${st.estHours}h needed` : '';
     this.title.innerHTML =
       `<span class="cal-task">${this._esc(task.name)}</span>
        <span class="cal-sub">▸ ${this._esc(st.name)}${est}</span>`;
 
+    // relabel push button based on sync state
+    const pushBtn = document.getElementById('calPush');
+    pushBtn.textContent = this.gcal.syncEnabled ? 'Push to Google Calendar' : 'Save blocks';
+
     this.blocks = st.blocks.map((b) => new TimeBlock(b));
-    this._originalEventIds = st.blocks.map((b) => b.eventId).filter(Boolean);    this.weekStart = this._mondayOf(new Date());
+    this._originalEventIds = st.blocks.map((b) => b.eventId).filter(Boolean);
+    this.weekStart = this._mondayOf(new Date());
     this.overlay.classList.add('open');
     await this._loadAndRender();
     this._scrollToHour(8);
@@ -72,16 +75,66 @@ export class CalendarView {
     this.gridWrap.innerHTML = '<div class="cal-loading">Loading your calendar…</div>';
     const weekEnd = new Date(this.weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
+
+    // fetch Google busy events
+    let googleBusy = [];
     try {
       const calIds = this.settings.getSelectedCalendars();
-      this.busyEvents = this.gcal.isAuthed
+      googleBusy = this.gcal.isAuthed
         ? await this.gcal.getEvents(this.weekStart, weekEnd, calIds)
         : [];
     } catch (e) {
       console.error(e);
-      this.busyEvents = [];
+      googleBusy = [];
     }
+
+    // collect OTHER app blocks (from other subtasks) as busy context
+    const appBusy = this._collectOtherAppBlocks();
+
+    // dedup: skip Google events that correspond to app blocks (by eventId)
+    const appBlockEventIds = new Set();
+    this.store.getAll().forEach((t) =>
+      t.subtasks.forEach((s) =>
+        s.blocks.forEach((b) => { if (b.eventId) appBlockEventIds.add(b.eventId); })
+      )
+    );
+    const dedupedGoogle = googleBusy.filter((ev) => !appBlockEventIds.has(ev.id));
+
+    // merge: Google busy + other app blocks
+    this.busyEvents = [...dedupedGoogle, ...appBusy];
+
     this._render();
+  }
+
+  // Gather blocks from all subtasks EXCEPT the one currently being scheduled,
+  // so you can see your existing plan as busy context.
+  _collectOtherAppBlocks() {
+    const result = [];
+    const curTaskId = this.context?.taskId;
+    const curSubIndex = this.context?.subIndex;
+
+    this.store.getAll().forEach((task) => {
+      task.subtasks.forEach((st, subIndex) => {
+        // skip the subtask we're currently scheduling (its blocks are editable)
+        if (task.id === curTaskId && subIndex === curSubIndex) return;
+
+        st.blocks.forEach((b) => {
+          if (!b.date || !b.start) return;
+          const start = new Date(b.date + 'T00:00:00');
+          const [h, m] = b.start.split(':').map(Number);
+          start.setHours(h, m, 0, 0);
+          const end = new Date(start.getTime() + b.hoursNum * 3600000);
+          result.push({
+            title: `${task.name}: ${st.name}`,
+            start,
+            end,
+            _appBlock: true, // mark so we could style differently
+          });
+        });
+      });
+    });
+
+    return result;
   }
 
   // ---------- render ----------
@@ -136,7 +189,7 @@ export class CalendarView {
       const dayIdx = days.findIndex((d) => sameDay(d, ev.start));
       if (dayIdx < 0) return;
       const el = document.createElement('div');
-      el.className = 'cal-event';
+      el.className = ev._appBlock ? 'cal-event cal-event-app' : 'cal-event';
       el.style.top = this._minutesFromMidnight(ev.start) * PX_PER_MIN + 'px';
       el.style.height = Math.max(16, (ev.end - ev.start) / 60000 * PX_PER_MIN) + 'px';
       el.textContent = ev.title;
@@ -304,58 +357,58 @@ export class CalendarView {
     const task = this.store.find(this.context.taskId);
     const st = task.subtasks[this.context.subIndex];
     const btn = document.getElementById('calPush');
-    btn.disabled = true; btn.textContent = 'Saving…';
+    const syncOn = this.gcal.syncEnabled;
+    btn.disabled = true;
+    btn.textContent = syncOn ? 'Saving…' : 'Saving…';
 
     try {
-      // create or update each block
-      for (const b of this.blocks) {
-        if (b.eventId) {
-          await this.gcal.updateEvent({
-            eventId: b.eventId,
-            summary: `${task.name}: ${st.name}`,
-            startDate: b.date, startTime: b.start, hours: b.hours,
-          });
-        } else {
-          const eventId = await this.gcal.createEvent({
-            summary: `${task.name}: ${st.name}`,
-            description: st.note || '',       // ← include the note
-            startDate: b.date, startTime: b.start, hours: b.hours,
-          });
-          b.eventId = eventId;
+      if (syncOn) {
+        // create or update each block on Google Calendar
+        for (const b of this.blocks) {
+          if (b.eventId) {
+            await this.gcal.updateEvent({
+              eventId: b.eventId,
+              summary: `${task.name}: ${st.name}`,
+              startDate: b.date, startTime: b.start, hours: b.hours,
+            });
+          } else {
+            const newId = await this.gcal.createEvent({
+              summary: `${task.name}: ${st.name}`,
+              description: st.note || '',
+              startDate: b.date, startTime: b.start, hours: b.hours,
+            });
+            b.eventId = newId; // may be null if guarded; that's ok
+          }
+        }
+
+        // delete events for blocks removed in the editor
+        const currentIds = this.blocks.map((b) => b.eventId).filter(Boolean);
+        const removedIds = (this._originalEventIds || [])
+          .filter((id) => !currentIds.includes(id));
+        for (const id of removedIds) {
+          await this.gcal.deleteEvent(id);
         }
       }
-
-      // delete events for blocks removed in the editor
-      const currentIds = this.blocks.map((b) => b.eventId).filter(Boolean);
-      const removedIds = (this._originalEventIds || [])
-        .filter((id) => !currentIds.includes(id));
-      for (const id of removedIds) {
-        await this.gcal.deleteEvent(id);
-      }
+      // if sync off: skip ALL Google calls; blocks just save locally below
 
       this.store.setSubtaskBlocks(this.context.taskId, this.context.subIndex, this.blocks);
 
       btn.textContent = '✓ Saved';
 
-      // close + advance AFTER the brief success message
       setTimeout(() => {
         btn.disabled = false;
-        btn.textContent = 'Push to Google Calendar';
-
-        // hide overlay directly (don't use close() if it calls onDone)
+        btn.textContent = syncOn ? 'Push to Google Calendar' : 'Save blocks';
         document.getElementById('calOverlay').classList.remove('open');
         this.context = null;
         this._inCreationSequence = false;
-
-        // signal success → advance to next subtask (called exactly once)
         this.onDone({ cancelled: false, discardTask: false });
       }, 1000);
 
     } catch (err) {
       console.error(err);
       alert('Error: ' + (err.result?.error?.message || err.message));
-      btn.disabled = false; btn.textContent = 'Push to Google Calendar';
-      // don't advance on error
+      btn.disabled = false;
+      btn.textContent = syncOn ? 'Push to Google Calendar' : 'Save blocks';
     }
   }
 

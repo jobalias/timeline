@@ -14,10 +14,11 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     this.showCompleted = false;
     this.wrap = document.getElementById('gridWrap');
     this.onToggleWaiting = onToggleWaiting || (() => {});
-    this.windowStart = startOfDay(new Date());
-    this.windowStart.setDate(this.windowStart.getDate() - WINDOW_LOOKBACK);
     this.isMobile = window.innerWidth < 768;
     this.effectiveDays = this.isMobile ? 10 : DAYS_SHOWN;
+    const halfWindow = Math.floor(this.effectiveDays / 2);
+    this.windowStart = startOfDay(new Date());
+    this.windowStart.setDate(this.windowStart.getDate() - halfWindow);
 
     // click handling (edit / delete / schedule)
     this.wrap.addEventListener('click', (e) => {
@@ -101,7 +102,50 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
         this._updateStickyMonths();
         scrollScheduled = false;
       });
-    }, { passive: true });  }
+    }, { passive: true });  
+
+    // ----- Grid window navigation (prev/next/today) -----
+    const prevBtn = document.getElementById('gridPrev');
+    const nextBtn = document.getElementById('gridNext');
+    const todayBtn = document.getElementById('gridToday');
+
+    if (prevBtn) prevBtn.addEventListener('click', () => this._shiftWindow(-7));
+    if (nextBtn) nextBtn.addEventListener('click', () => this._shiftWindow(7));
+    if (todayBtn) todayBtn.addEventListener('click', () => this._goToday());
+  }
+
+  // ----- window navigation -----
+  _shiftWindow(days) {
+    this.windowStart.setDate(this.windowStart.getDate() + days);
+    this.render();
+    this.wrap.scrollLeft = 0; // reset horizontal scroll to show the new window start
+  }
+
+  _goToday() {
+    const halfWindow = Math.floor(this.effectiveDays / 2);
+    this.windowStart = startOfDay(new Date());
+    this.windowStart.setDate(this.windowStart.getDate() - halfWindow);
+    this.render();
+    requestAnimationFrame(() => this._scrollToToday());
+  }
+
+  _scrollToToday() {
+    const todayHead = this.wrap.querySelector('.day-head.today');
+    if (!todayHead) return;
+
+    const labelCol = this.wrap.querySelector('.label-col');
+    const labelW = labelCol ? labelCol.offsetWidth : 0;
+
+    // width of one day column (to offset by 2 columns)
+    const dayW = todayHead.offsetWidth;
+
+    // scroll so today sits ~2 columns from the left (after the label column)
+    const target = todayHead.offsetLeft - labelW - (dayW * 2);
+
+    this.wrap.scrollLeft = Math.max(0, target);
+
+    requestAnimationFrame(() => this._updateStickyMonths());
+  }
 
   render() {
     const tasks = this.store.getSorted();
@@ -186,6 +230,12 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     this.wrap.innerHTML = html;
 
     this._updateStickyMonths();
+  }
+
+  onShow() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => this._scrollToToday());
+    });
   }
 
   _renderSubtaskRow(task, st, si, days, today) {

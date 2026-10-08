@@ -43,6 +43,11 @@
           <input type="checkbox" id="showCompleted"> Show completed
         </label>
         <span class="sync-badge" id="syncBadge">● Not synced</span>
+        <div class="grid-nav">
+          <button id="gridPrev">← Prev week</button>
+          <button id="gridToday">Today</button>
+          <button id="gridNext">Next week →</button>
+        </div>
         <span class="auth-status connected" id="authStatus" style="margin-left:auto;">
           Signed in ✓
         </span>
@@ -72,7 +77,7 @@
     <div id="plannerViewContainer" style="display:none;">
       <div class="planner-toolbar">
         <button class="primary" id="plannerAddTaskBtn">+ Add Task</button>
-        <button id="plannerRefreshBtn">🔄 Sync with Calendar</button>
+        <button id="plannerRefreshBtn">🔄 Refresh</button>
         <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
           <input type="checkbox" id="hideScheduled"> Hide fully scheduled
         </label>
@@ -138,17 +143,42 @@
     </div>
   </div>
 
-  <!-- ============ Calendar Picker ============ -->
-  <div class="modal-backdrop" id="calPickerBackdrop">
-    <div class="modal" style="width:min(380px,92vw)">
-      <h2>Calendars to display</h2>
-      <p style="color:var(--muted);font-size:13px;margin:0 0 12px;">
-        Choose which calendars' events appear as gray busy blocks.
-      </p>
-      <div id="calPickerList" style="display:flex;flex-direction:column;gap:8px;"></div>
+  <!-- ============ Settings Modal ============ -->
+  <div class="modal-backdrop" id="settingsBackdrop">
+    <div class="modal" style="width:min(420px,92vw)">
+      <h2>⚙️ Settings</h2>
+
+      <!-- Calendar sync toggle -->
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <div class="settings-row-title">Sync to Google Calendar</div>
+          <div class="settings-row-desc">
+            When off, your scheduled blocks stay in the app only. You'll still see your calendar events.
+          </div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="syncToggle">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+      <!-- Expandable calendar picker -->
+      <div class="settings-section">
+        <button class="settings-expand" id="calExpandBtn">
+          <span>Calendars to display</span>
+          <span class="settings-chevron" id="calChevron">▸</span>
+        </button>
+        <div class="settings-expand-body" id="calExpandBody" style="display:none;">
+          <p style="color:var(--muted);font-size:12px;margin:4px 0 10px;">
+            Choose which calendars' events appear as gray busy blocks.
+          </p>
+          <div id="calPickerList" style="display:flex;flex-direction:column;gap:8px;"></div>
+        </div>
+      </div>
+
       <div class="modal-actions">
-        <button id="calPickerCancel">Cancel</button>
-        <button class="primary" id="calPickerSave">Save</button>
+        <button id="settingsCancelBtn">Cancel</button>
+        <button class="primary" id="settingsSaveBtn">Save</button>
       </div>
     </div>
   </div>

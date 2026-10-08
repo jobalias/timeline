@@ -5,13 +5,23 @@ const STORAGE_KEY = 'taskGrid';
 
 export class TaskStore {
   constructor() {
-    this.completionLog = [];        
+    this.completionLog = []; 
+    this.calendarSyncEnabled = true;       
     this.tasks = this._loadLocal();
     this.listeners = [];
     this.used_colors = [];
     this.drive = null;
     this.syncStatusFn = () => {};
     this._saveTimer = null;
+  }
+
+  getCalendarSyncEnabled() {
+    return this.calendarSyncEnabled !== false; // default true
+  }
+
+  setCalendarSyncEnabled(enabled) {
+    this.calendarSyncEnabled = enabled;
+    this._save();
   }
 
   // ---------- Drive wiring ----------
@@ -69,29 +79,52 @@ export class TaskStore {
       for (const st of task.subtasks) {
         const keptBlocks = [];
         for (const b of st.blocks) {
-          if (!b.eventId) { changed = true; continue; }
-
-          const real = eventMap.get(b.eventId);
-          if (!real) {
-            // not in range fetch — could be deleted OR out of range
-            // to be safe, keep it (don't delete based on range miss)
-            keptBlocks.push(b);
+          // No eventId → app-only block → just keep it (don't delete!)
+          if (!b.eventId) {
+            keptBlocks.push(b);   // ← CHANGED: keep app-only blocks
             continue;
           }
 
+          let real;
+          try {
+            real = await googleCalendar.getEventById(b.eventId);
+          } catch (e) {
+            keptBlocks.push(b); // network error → keep
+            continue;
+          }
+
+          if (real === null) {
+            // event gone → clear eventId, KEEP block
+            b.eventId = null;
+            changed = true;
+            keptBlocks.push(b);   // ← CHANGED: keep the block
+            continue;
+          }
+
+          // event exists → sync time (for incomplete subtasks)
           if (!st.done) {
             const newDate = this._ymdLocal(real.start);
             const newStart = this._hhmm(real.start);
             const newHours = (real.end - real.start) / 3600000;
             if (b.date !== newDate || b.start !== newStart ||
                 Math.abs(b.hoursNum - newHours) > 0.001) {
-              b.date = newDate; b.start = newStart;
+              b.date = newDate;
+              b.start = newStart;
               b.hours = Math.round(newHours * 100) / 100;
               changed = true;
             }
           }
+
+          // (description → note sync, if you have Chunk 3)
+          const eventDesc = real.description || '';
+          if (eventDesc !== (st.note || '')) {
+            st.note = eventDesc;
+            changed = true;
+          }
+
           keptBlocks.push(b);
         }
+
         st.blocks = keptBlocks;
       }
     }
@@ -119,7 +152,9 @@ export class TaskStore {
       if (Array.isArray(remote)) {
         taskArray = remote; log = [];
       } else if (remote && typeof remote === 'object') {
-        taskArray = remote.tasks || []; log = remote.completionLog || [];
+        taskArray = remote.tasks || []; 
+        log = remote.completionLog || [];
+        this.calendarSyncEnabled = remote.calendarSyncEnabled !== false;
       } else {
         this._setStatus('synced'); return;
       }
@@ -148,6 +183,7 @@ export class TaskStore {
     if (!raw) { this.completionLog = []; return []; }
     if (Array.isArray(raw)) { this.completionLog = []; return raw.map((t) => new Task(t)); }
     this.completionLog = raw.completionLog || [];
+    this.calendarSyncEnabled = raw.calendarSyncEnabled !== false;
     return (raw.tasks || []).map((t) => new Task(t));
   }
 
@@ -155,6 +191,7 @@ export class TaskStore {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       tasks: this.tasks.map((t) => t.toJSON()),
       completionLog: this.completionLog,
+      calendarSyncEnabled: this.calendarSyncEnabled,
     }));
   }
 
@@ -164,6 +201,7 @@ export class TaskStore {
     const ok = await this.drive.save({
       tasks: this.tasks.map((t) => t.toJSON()),
       completionLog: this.completionLog,
+      calendarSyncEnabled: this.calendarSyncEnabled,
     });
     this._setStatus(ok ? 'synced' : 'failed');
   }
@@ -224,61 +262,55 @@ export class TaskStore {
     });
   }
 
-  // Remove blocks that have no matching Google event, and dedupe
-  async cleanupOrphanedBlocks(googleCalendar) {
-    if (!googleCalendar || !googleCalendar.isAuthed) {
-      return { removed: 0, deduped: 0 };
-    }
+  // Count blocks that have NO calendar event (need pushing)
+  countBlocksWithoutEvents() {
+    let count = 0;
+    this.tasks.forEach((t) =>
+      t.subtasks.forEach((st) => {
+        if (st.done) return; // skip completed subtasks
+        st.blocks.forEach((b) => { if (!b.eventId) count++; });
+      })
+    );
+    return count;
+  }
 
-    let removed = 0;
-    let deduped = 0;
+  // Push all blocks lacking an eventId to Google Calendar (create events).
+  // Used when turning sync on.
+  async pushUnsyncedBlocks(googleCalendar, onProgress = null) {
+    if (!googleCalendar || !googleCalendar.isAuthed) return 0;
+
+    const prevSync = googleCalendar.syncEnabled;
+    googleCalendar.syncEnabled = true; // ensure writes go through
+
+    const total = this.countBlocksWithoutEvents();
+    let pushed = 0;
 
     for (const task of this.tasks) {
       for (const st of task.subtasks) {
-        if (st.done) continue; // leave completed alone
-
-        const validBlocks = [];
-        const seenSignatures = new Set();
-
+        if (st.done) continue; // don't recreate events for completed subtasks
         for (const b of st.blocks) {
-          // 1) dedupe: same date+start+hours = duplicate
-          const sig = `${b.date}|${b.start}|${b.hours}`;
-          if (seenSignatures.has(sig)) {
-            deduped++;
-            // if it has an eventId, delete that duplicate from Google too
-            if (b.eventId) {
-              try { await googleCalendar.deleteEvent(b.eventId); } catch {}
-            }
-            continue;
+          if (b.eventId) continue; // already synced
+          try {
+            const eventId = await googleCalendar.createEvent({
+              summary: `${task.name}: ${st.name}`,
+              description: st.note || '',
+              startDate: b.date,
+              startTime: b.start,
+              hours: b.hours,
+            });
+            b.eventId = eventId;
+            pushed++;
+            if (onProgress) onProgress(pushed, total);
+          } catch (e) {
+            console.warn('Failed to push block:', e);
           }
-          seenSignatures.add(sig);
-
-          // 2) orphan check: does the Google event still exist?
-          if (b.eventId) {
-            let exists = true;
-            try {
-              const real = await googleCalendar.getEventById(b.eventId);
-              exists = real !== null;
-            } catch {
-              exists = true; // network error → keep it, don't lose data
-            }
-            if (!exists) {
-              removed++;
-              continue; // event gone → drop this orphaned block
-            }
-          }
-          // blocks with no eventId: keep (can't verify) — or optionally drop
-          validBlocks.push(b);
         }
-
-        st.blocks = validBlocks;
       }
     }
 
-    if (removed > 0 || deduped > 0) {
-      this._save();
-    }
-    return { removed, deduped };
+    googleCalendar.syncEnabled = prevSync; // restore
+    this._save();
+    return pushed;
   }
 
   // ---------- mutations ----------
@@ -453,5 +485,47 @@ export class TaskStore {
     if (!st) return;
     st.note = note;
     this._save();
+  }
+
+  async deleteAllCalendarEvents(googleCalendar, onProgress = null) {
+    if (!googleCalendar || !googleCalendar.isAuthed) return 0;
+
+    const prevSync = googleCalendar.syncEnabled;
+    googleCalendar.syncEnabled = true;
+
+    // count total first (for progress)
+    const total = this.countBlocksWithEvents();
+    let deleted = 0;
+
+    for (const task of this.tasks) {
+      for (const st of task.subtasks) {
+        for (const b of st.blocks) {
+          if (!b.eventId) continue;
+          try {
+            await googleCalendar.deleteEvent(b.eventId);
+            deleted++;
+            if (onProgress) onProgress(deleted, total); // ← report progress
+          } catch (e) {
+            console.warn('Failed to delete event:', e);
+          }
+          b.eventId = null;
+        }
+      }
+    }
+
+    googleCalendar.syncEnabled = prevSync;
+    this._save();
+    return deleted;
+  }
+
+  // Count how many blocks currently have calendar events
+  countBlocksWithEvents() {
+    let count = 0;
+    this.tasks.forEach((t) =>
+      t.subtasks.forEach((st) =>
+        st.blocks.forEach((b) => { if (b.eventId) count++; })
+      )
+    );
+    return count;
   }
 }

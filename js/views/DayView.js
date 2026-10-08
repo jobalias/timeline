@@ -51,11 +51,13 @@ export class DayView {
       this.busyEvents = [];
     }
 
-    // collect task blocks for this day
+    // collect task blocks for this day + track their eventIds
     const taskBlocks = [];
+    const blockEventIds = new Set();   // ← eventIds already shown as app blocks
     this.store.getAll().forEach((task) => {
       task.subtasks.forEach((st) => {
         st.blocks.forEach((b) => {
+          if (b.eventId) blockEventIds.add(b.eventId); // track for dedup
           if (b.date && sameDay(parseYmd(b.date), this.currentDay)) {
             taskBlocks.push({
               taskName: task.name,
@@ -70,10 +72,10 @@ export class DayView {
       });
     });
 
-    this._renderGrid(taskBlocks);
+    this._renderGrid(taskBlocks, blockEventIds);
   }
 
-  _renderGrid(taskBlocks) {
+  _renderGrid(taskBlocks, blockEventIds = new Set()) {
     const HOUR_PX = 44;
     let html = '<div class="dv-grid">';
 
@@ -84,15 +86,16 @@ export class DayView {
                </div>`;
     }
 
-    // gray busy events (behind task blocks)
+    // gray busy events — SKIP ones that are already shown as app blocks
     this.busyEvents.forEach((ev) => {
+      if (blockEventIds.has(ev.id)) return;   
       const top = (ev.start.getHours() + ev.start.getMinutes() / 60) * HOUR_PX;
       const height = Math.max(18, ((ev.end - ev.start) / 3600000) * HOUR_PX);
       html += `<div class="dv-busy" style="top:${top}px;height:${height}px;"
                     title="${this._esc(ev.title)}">${this._esc(ev.title)}</div>`;
     });
 
-    // colored task blocks
+    // colored task blocks (unchanged)
     taskBlocks.forEach((b) => {
       const [h, m] = b.start.split(':').map(Number);
       const top = (h + m / 60) * HOUR_PX;
@@ -109,8 +112,6 @@ export class DayView {
 
     html += '</div>';
     this.bodyEl.innerHTML = html;
-
-    // scroll to 8am on first render of a day
     this.bodyEl.scrollTop = 8 * HOUR_PX;
   }
 

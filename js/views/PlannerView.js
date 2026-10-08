@@ -272,13 +272,15 @@ export class PlannerView {
         hours: Math.max(0.25, Math.round(hours * 4) / 4),
       });
 
-      if (this.gcal.isAuthed) {
+      if (this.gcal.isAuthed && this.gcal.syncEnabled) {
         const eventId = await this.gcal.createEvent({
           summary: `${task.name}: ${st.name}`,
-          description: st.note || '', 
+          description: st.note || '',
           startDate: block.date, startTime: block.start, hours: block.hours,
         });
         block.eventId = eventId;
+      } else {
+        block.eventId = null; 
       }
 
       this.store.addBlockToSubtask(taskId, subIndex, block);
@@ -319,7 +321,7 @@ async _onEventChanged(info) {
     block.hours = (newEnd - newStart) / 3600000;
 
     // update Google
-    if (this.gcal.isAuthed && block.eventId) {
+    if (this.gcal.isAuthed && this.gcal.syncEnabled && block.eventId) {
       try {
         await this.gcal.updateEvent({
           eventId: block.eventId,

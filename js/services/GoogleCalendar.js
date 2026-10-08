@@ -8,6 +8,7 @@ export class GoogleCalendar {
     this.isAuthed = false;
     this.tokenClient = null;
     this.onAuthChange = () => {};
+    this.syncEnabled = true;
   }
 
   init() {
@@ -144,6 +145,7 @@ toggleAuth() {
   }
   
   async updateEvent({ eventId, summary, startDate, startTime, hours }) {
+    if (!this.syncEnabled) return eventId || null;
     const [h, m] = startTime.split(':').map(Number);
     const startDt = new Date(startDate + 'T00:00:00');
     startDt.setHours(h, m, 0, 0);
@@ -165,6 +167,7 @@ toggleAuth() {
   }
 
   async updateEventDescription(eventId, description) {
+    if (!this.syncEnabled) return eventId || null;
     try {
       await gapi.client.calendar.events.patch({
         calendarId: 'primary',
@@ -235,6 +238,7 @@ toggleAuth() {
   }
 
   async createEvent({ summary, description, startDate, startTime, hours }) {
+    if (!this.syncEnabled) return eventId || null;
     const [h, m] = startTime.split(':').map(Number);
     const startDt = new Date(startDate + 'T00:00:00');
     startDt.setHours(h, m, 0, 0);
@@ -258,6 +262,7 @@ toggleAuth() {
   }
 
   async deleteEvent(eventId) {
+    if (!this.syncEnabled) return eventId || null;
     try {
       await gapi.client.calendar.events.delete({
         calendarId: 'primary', eventId,

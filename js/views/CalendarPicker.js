@@ -4,24 +4,17 @@ export class CalendarPicker {
     this.settings = settings;
     this.onSave = onSave;
 
-    this.backdrop = document.getElementById('calPickerBackdrop');
     this.list = document.getElementById('calPickerList');
-
-    document.getElementById('settingsBtn')
-      .addEventListener('click', () => this.open());
-    document.getElementById('calPickerCancel')
-      .addEventListener('click', () => this.close());
-    document.getElementById('calPickerSave')
-      .addEventListener('click', () => this._save());
   }
 
-  async open() {
+  // Populate the checkbox list (called when the Settings modal opens)
+  async populateList() {
     if (!this.gcal.isAuthed) {
-      alert('Sign in first.');
+      this.list.innerHTML =
+        '<div style="color:#8e8e93;">Sign in to choose calendars.</div>';
       return;
     }
     this.list.innerHTML = '<div style="color:#8e8e93;">Loading calendars…</div>';
-    this.backdrop.classList.add('open');
 
     try {
       const calendars = await this.gcal.listCalendars();
@@ -45,15 +38,12 @@ export class CalendarPicker {
     }
   }
 
-  close() {
-    this.backdrop.classList.remove('open');
-  }
-
-  _save() {
+  // Save the current checkbox selection (called when Settings modal saves)
+  saveSelection() {
+    if (!this.list) return;
     const ids = [...this.list.querySelectorAll('input:checked')].map((c) => c.value);
     if (ids.length === 0) ids.push('primary'); // never empty
     this.settings.setSelectedCalendars(ids);
-    this.close();
     this.onSave();
   }
 

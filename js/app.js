@@ -26,6 +26,7 @@ class App {
     this.noteModal = new NoteModal(this.store, {
           onSaved: (saved) => this._onNoteSaved(saved), // Chunk 2 syncs to calendar
         });
+    this.activeView = 'grid';
     // sync status → toolbar
     const syncEl = document.getElementById('syncStatus');
     // sync status → badge + warning banner
@@ -117,13 +118,15 @@ class App {
     this._bindAuth();
     this._bindLogin();
     this._bindTabs();
+    this._bindSettings();
     this.store.subscribe(() => {
-      if (this.activeView === 'grid') {
+      const view = this.activeView || 'grid';
+      if (view === 'grid') {
         this.grid.render();
         this.dayView.render();
-      } else if (this.activeView === 'planner') {
+      } else if (view === 'planner') {
         this.plannerView.refresh();
-      } else if (this.activeView === 'progress') {
+      } else if (view === 'progress') {
         this.progressView.refresh();
       }
     });
@@ -146,7 +149,8 @@ class App {
       if (connected) {
         this._showApp();
         await this.store.loadFromDrive();
-        await this._reconcile();       // ← sync with calendar after loading
+        this.gcal.syncEnabled = this.store.getCalendarSyncEnabled(); // ← apply loaded setting
+        await this._reconcile();
       } else {
         this._showLogin();
         document.getElementById('syncBadge').textContent = '';
@@ -154,10 +158,166 @@ class App {
     };
   }
 
+  _bindSettings() {
+    const backdrop = document.getElementById('settingsBackdrop');
+    const toggle = document.getElementById('syncToggle');
+    const expandBtn = document.getElementById('calExpandBtn');
+    const chevron = document.getElementById('calChevron');
+    const expandBody = document.getElementById('calExpandBody');
+
+    // open settings
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      toggle.checked = this.store.getCalendarSyncEnabled();
+      this.calendarPicker.populateList();
+      backdrop.classList.add('open');
+    });
+
+    // expandable calendar section
+    expandBtn.addEventListener('click', () => {
+      const isOpen = expandBody.style.display !== 'none';
+      expandBody.style.display = isOpen ? 'none' : 'block';
+      chevron.classList.toggle('open', !isOpen);
+    });
+
+    // cancel
+    document.getElementById('settingsCancelBtn').addEventListener('click', () => {
+      backdrop.classList.remove('open');
+    });
+
+    // save
+    document.getElementById('settingsSaveBtn').addEventListener('click', async () => {
+      const saveBtn = document.getElementById('settingsSaveBtn');
+      const cancelBtn = document.getElementById('settingsCancelBtn');
+      const newSync = toggle.checked;
+      const oldSync = this.store.getCalendarSyncEnabled();
+
+      this.calendarPicker.saveSelection();
+
+      if (newSync !== oldSync) {
+        if (!newSync) {
+          // Turning sync OFF
+          saveBtn.disabled = true;
+          cancelBtn.disabled = true;
+          const handled = await this._handleSyncOff(saveBtn);
+          saveBtn.disabled = false;
+          cancelBtn.disabled = false;
+          saveBtn.textContent = 'Save';
+          if (!handled) {
+            toggle.checked = true;
+            return;
+          }
+        } else {
+          // Turning sync ON
+          saveBtn.disabled = true;
+          cancelBtn.disabled = true;
+          const handled = await this._handleSyncOn(saveBtn);
+          saveBtn.disabled = false;
+          cancelBtn.disabled = false;
+          saveBtn.textContent = 'Save';
+          if (!handled) {
+            toggle.checked = false; // cancelled → revert
+            return;
+          }
+        }
+      }
+
+      backdrop.classList.remove('open');
+      this.dayView.render();
+      this.plannerView.refresh();
+      this.grid.render();
+    });
+  }
+
+  // Returns true if the transition completed, false if cancelled
+  async _handleSyncOn(saveBtn) {
+    // enable sync first so writes work
+    this.store.setCalendarSyncEnabled(true);
+    this.gcal.syncEnabled = true;
+
+    if (!this.gcal.isAuthed) return true;
+
+    const unsyncedCount = this.store.countBlocksWithoutEvents();
+    console.log('🔍 unsyncedCount:', unsyncedCount);  // ← add
+
+    // also log block details
+    this.store.getAll().forEach((t) => {
+      t.subtasks.forEach((st) => {
+        st.blocks.forEach((b) => {
+          console.log(`block: ${t.name}/${st.name} date=${b.date} eventId=${b.eventId} done=${st.done}`);
+        });
+      });
+    });
+    // nothing to push → done
+    if (unsyncedCount === 0) return true;
+
+    const choice = await this.deleteDialog.open({
+      title: 'Turn on calendar sync?',
+      message: `You have ${unsyncedCount} scheduled block${unsyncedCount === 1 ? '' : 's'} not yet on your Google Calendar. ` +
+               `Add ${unsyncedCount === 1 ? 'it' : 'them'} now?`,
+      labels: {
+        all: `📅 Add ${unsyncedCount === 1 ? 'it' : 'all'} to my calendar`,
+        none: 'Only sync new blocks from now on',
+        cancel: 'Cancel',
+      },
+      hide: ['future'],
+    });
+
+    if (choice === 'cancel') {
+      // revert sync (user backed out)
+      this.store.setCalendarSyncEnabled(false);
+      this.gcal.syncEnabled = false;
+      return false;
+    }
+
+    if (choice === 'all') {
+      await this.store.pushUnsyncedBlocks(this.gcal, (done, total) => {
+        if (saveBtn) saveBtn.textContent = `Adding ${done} of ${total}…`;
+      });
+    }
+    // 'none' → leave existing blocks app-only; only future blocks sync
+
+    return true;
+  }
+
+  async _handleSyncOff(saveBtn) {
+    const eventCount = this.store.countBlocksWithEvents();
+
+    if (eventCount === 0 || !this.gcal.isAuthed) {
+      this.store.setCalendarSyncEnabled(false);
+      this.gcal.syncEnabled = false;
+      return true;
+    }
+
+    const choice = await this.deleteDialog.open({
+      title: 'Turn off calendar sync?',
+      message: `You have ${eventCount} event${eventCount === 1 ? '' : 's'} on your Google Calendar from this app. ` +
+               `Your blocks stay in the app either way. What should happen to the calendar events?`,
+      labels: {
+        all: '🗑 Delete all calendar events',
+        none: '📌 Keep events on my calendar',
+        cancel: 'Cancel',
+      },
+      hide: ['future'],
+    });
+
+    if (choice === 'cancel') return false;
+
+    if (choice === 'all') {
+      await this.store.deleteAllCalendarEvents(this.gcal, (done, total) => {
+        if (saveBtn) saveBtn.textContent = `Deleting ${done} of ${total}…`;
+      });
+    }
+
+    this.store.setCalendarSyncEnabled(false);
+    this.gcal.syncEnabled = false;
+    return true;
+  }
+
   _showApp() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContainer').style.display = 'block';
     this.grid.render();
+    this.grid.onShow();
     this.dayView.render();
   }
 
@@ -238,12 +398,14 @@ class App {
 
     if (input === null) {
       this.grid.render();
+      this.grid.onShow();
       return;
     }
     const actual = parseFloat(input);
     if (isNaN(actual) || actual < 0) {
       alert('Please enter a valid number of hours.');
       this.grid.render();
+      this.grid.onShow();
       return;
     }
 
@@ -324,6 +486,8 @@ class App {
     }
 
     this._nextInQueue();
+    this.grid.render();
+    this.dayView.render();
   }
 
   _bindTabs() {
@@ -343,6 +507,7 @@ class App {
       if (which === 'grid') {
         tabGrid.classList.add('active'); gridC.style.display = 'block';
         this.grid.render();
+        this.grid.onShow(); 
       } else if (which === 'planner') {
         tabPlanner.classList.add('active'); planC.style.display = 'block';
         this.plannerView.activate();
