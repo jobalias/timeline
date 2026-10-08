@@ -102,6 +102,8 @@ export class PlannerView {
         timeGridWeek: { duration: { days: 7 }, dateIncrement: { days: 1 } },
       },
       nowIndicator: true,
+      slotDuration: '00:30:00',      // 30-min grid lines (or '00:15:00' for finer)
+      slotLabelInterval: '01:00:00', // label every hour
       slotMinTime: '06:00:00',
       scrollTime: '08:00:00',
       allDaySlot: false,
