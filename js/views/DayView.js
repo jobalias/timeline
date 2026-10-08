@@ -76,7 +76,7 @@ export class DayView {
   }
 
   _renderGrid(taskBlocks, blockEventIds = new Set()) {
-    const HOUR_PX = 44;
+    const HOUR_PX = 50;
     let html = '<div class="dv-grid">';
 
     // hour lines + labels
