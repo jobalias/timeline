@@ -41,6 +41,18 @@ class App {
         e.returnValue = ''; // triggers browser's "unsaved changes" prompt
       }
     });
+    window.addEventListener('online', () => {
+      const s = this.store._status;
+      if (s === 'failed' || s === 'offline') {
+        this.store._saveRemote();
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.store._status === 'failed') {
+        this.store._saveRemote();
+      }
+    });
     this.store.onSyncStatus((status) => {
       badge.className = 'sync-badge ' + status;
       warning.style.display = 'none';
@@ -312,6 +324,33 @@ class App {
     this.gcal.syncEnabled = false;
     return true;
   }
+
+  // ==================== Task deletion ====================
+  async _handleDeleteTask(id) {
+  const task = this.store.find(id);
+  if (!task) return;
+
+  const hasEvents = task.subtasks.some((s) =>
+    s.blocks.some((b) => b.eventId)
+  );
+
+  // no events or not connected → simple confirm
+  if (!hasEvents || !this.gcal.isAuthed) {
+    if (confirm(`Delete "${task.name}" and all its subtasks?`)) {
+      await this.store.removeTask(id, 'none', this.gcal);
+    }
+    return;
+  }
+
+  // has events → three-option dialog
+  const choice = await this.deleteDialog.open({
+    title: `Delete "${task.name}"?`,
+    message: 'This task has calendar events. What should happen to them?',
+  });
+  if (choice === 'cancel') return;
+
+  await this.store.removeTask(id, choice, this.gcal);
+}
 
   _showApp() {
     document.getElementById('loginScreen').style.display = 'none';

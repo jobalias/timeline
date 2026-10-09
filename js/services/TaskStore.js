@@ -13,6 +13,10 @@ export class TaskStore {
     this.drive = null;
     this.syncStatusFn = () => {};
     this._saveTimer = null;
+    this._saving = false;
+    this._pendingSave = false;
+    this._retryTimer = null;
+    this._retryCount = 0;
   }
 
   getCalendarSyncEnabled() {
@@ -196,15 +200,63 @@ export class TaskStore {
   }
 
   async _saveRemote() {
-    if (!this.drive || !this.drive.isReady) { this._setStatus('offline'); return; }
+  // If a save is already running, mark that another is needed and bail.
+  // The in-flight save will re-run itself when it finishes.
+  if (this._saving) {
+    this._pendingSave = true;
+    return;
+  }
+
+  this._saving = true;
+  try {
+    if (!this.drive || !this.drive.isReady) {
+      this._setStatus('offline');
+      return;
+    }
+
     this._setStatus('saving');
+
     const ok = await this.drive.save({
       tasks: this.tasks.map((t) => t.toJSON()),
       completionLog: this.completionLog,
       calendarSyncEnabled: this.calendarSyncEnabled,
     });
-    this._setStatus(ok ? 'synced' : 'failed');
+
+    if (ok) {
+      this._setStatus('synced');
+      this._retryCount = 0;
+      if (this._retryTimer) {
+        clearTimeout(this._retryTimer);
+        this._retryTimer = null;
+      }
+    } else {
+      this._setStatus('failed');
+      this._scheduleRetry();
+    }
+  } finally {
+    this._saving = false;
+
+    // If more changes arrived while we were saving, save again immediately
+    // so the newest state is persisted.
+    if (this._pendingSave) {
+      this._pendingSave = false;
+      this._saveRemote();
+    }
   }
+}
+
+_scheduleRetry() {
+  if (this._retryTimer) return; // one pending retry at a time
+  this._retryCount = (this._retryCount || 0) + 1;
+
+  // backoff: 2s, 4s, 8s, 16s … capped at 30s
+  const delay = Math.min(2000 * 2 ** (this._retryCount - 1), 30000);
+
+  this._retryTimer = setTimeout(() => {
+    this._retryTimer = null;
+    this._saveRemote();
+  }, delay);
+}
 
   addBlockToSubtask(taskId, subIndex, block) {
     const t = this.find(taskId);
@@ -407,8 +459,14 @@ export class TaskStore {
         const blockDate = new Date(b.date + 'T00:00:00');
         if (blockDate < today) continue;
       }
-      await googleCalendar.deleteEvent(b.eventId);
-      b.eventId = null;
+      try {
+        await googleCalendar.deleteEvent(b.eventId);
+        b.eventId = null;
+      } catch (e) {
+        // 404/410 = already gone on Google's side → safe to clear locally
+        console.warn('Failed to delete event, clearing locally:', b.eventId, e);
+        b.eventId = null; // or leave it — your call
+      }
     }
   }
 

@@ -4,7 +4,9 @@ export class GoogleDrive {
   constructor(googleCalendar) {
     // reuse the same auth (they share the gapi client + token)
     this.gcal = googleCalendar;
-    this.fileId = null; // cached once found/created
+    this.fileId = null; 
+    this._saveChain = null;
+    this._fileIdPromise = null;
   }
 
   get isReady() {
@@ -41,24 +43,59 @@ export class GoogleDrive {
 
   async save(tasksArray) {
     if (!this.isReady) return false;
+
+    // Serialize: chain this save after any in-flight save.
+    // This guarantees _ensureFileId + upload never run concurrently.
+    this._saveChain = (this._saveChain || Promise.resolve())
+      .catch(() => {}) // don't let a prior failure break the chain
+      .then(() => this._doSave(tasksArray));
+
+    return this._saveChain;
+  }
+
+  async _doSave(tasksArray) {
+    if (!this.isReady) return false;
     const content = JSON.stringify(tasksArray, null, 2);
+
     try {
-      this.fileId = this.fileId || (await this._findFile());
-      if (this.fileId) {
-        await this._uploadContent(this.fileId, content, 'PATCH');
-      } else {
-        const createResp = await gapi.client.drive.files.create({
-          resource: { name: FILE_NAME, parents: ['appDataFolder'] },
-          fields: 'id',
-        });
-        this.fileId = createResp.result.id;
-        await this._uploadContent(this.fileId, content, 'PATCH');
-      }
+      // Resolve the file id exactly once; never create duplicates.
+      await this._ensureFileId();
+      await this._uploadContent(this.fileId, content, 'PATCH');
       return true;
     } catch (err) {
-      if (this.gcal._handleApiError(err)) return false; // ← add
+      if (this.gcal && this.gcal._handleApiError(err)) return false;
       console.error('Drive save error:', err);
       return false;
+    }
+  }
+
+  // Finds-or-creates the data file, memoized so concurrent/repeated
+  // calls all await the SAME lookup/creation instead of racing.
+  async _ensureFileId() {
+    if (this.fileId) return this.fileId;
+
+    // If a lookup/creation is already in progress, await it.
+    if (!this._fileIdPromise) {
+      this._fileIdPromise = (async () => {
+        let id = await this._findFile();
+        if (!id) {
+          const createResp = await gapi.client.drive.files.create({
+            resource: { name: FILE_NAME, parents: ['appDataFolder'] },
+            fields: 'id',
+          });
+          id = createResp.result.id;
+        }
+        this.fileId = id;
+        return id;
+      })();
+    }
+
+    try {
+      return await this._fileIdPromise;
+    } finally {
+      // Clear the in-flight promise. If it succeeded, this.fileId is set
+      // so we won't re-enter. If it failed, the next save can retry.
+      this._fileIdPromise = null;
     }
   }
 
