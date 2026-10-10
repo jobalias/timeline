@@ -248,7 +248,7 @@ toggleAuth() {
         calendarId: 'primary',
         resource: {
           summary,
-          description: description || 'Scheduled via Task Grid',
+          description: description || '',
           start: { dateTime: startDt.toISOString() },
           end: { dateTime: endDt.toISOString() },
           colorId: '4',
