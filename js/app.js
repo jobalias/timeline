@@ -371,10 +371,15 @@ class App {
       .addEventListener('click', () => this.taskModal.openNew());
     document.getElementById('refreshBtn')
       .addEventListener('click', () => this._reconcile());
+    document.getElementById('plannerRefreshBtn')
+      .addEventListener('click', () => this._reconcile());
   }
 
   async _reconcile() {
-    const btn = document.getElementById('refreshBtn');
+    const gridBtn = document.getElementById('refreshBtn');
+    const plannerBtn = document.getElementById('plannerRefreshBtn');
+    const btn = this.activeView === 'planner' ? plannerBtn : gridBtn;
+    console.log("🔄 Reconciling with Google Calendar…");
     this.plannerView.refresh();
     if (btn) { btn.disabled = true; btn.textContent = '🔄 Syncing…'; }
 
