@@ -1,0 +1,69 @@
+/* ===== MODALS: generic, task, note, settings, delete dialog ===== */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  display: none; align-items: center; justify-content: center; z-index: 10;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--panel); border-radius: 14px;
+  padding: clamp(16px, 4vw, 24px);
+  width: min(500px, 92vw); max-height: 88vh; overflow-y: auto;
+}
+.modal h2 { margin: 0 0 16px; font-size: 18px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+/* Task modal: subtask rows */
+.subtask-row {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px; margin-top: 12px; position: relative; background: #fafafc;
+}
+.subtask-row .name-input { margin-bottom: 4px; }
+.date-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.date-fields .field label {
+  margin: 8px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.del-btn {
+  position: absolute; top: 8px; right: 8px; padding: 2px 8px;
+  color: #ff3b30; border: none; background: transparent; font-size: 16px;
+}
+
+/* Note modal */
+#noteText:focus { outline: none; border-color: var(--accent); }
+
+/* Settings modal */
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.settings-row-title { font-weight: 600; font-size: 15px; }
+.settings-row-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+.settings-section { padding: 12px 0; }
+.settings-expand {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; background: transparent; border: none;
+  font-size: 15px; font-weight: 600; cursor: pointer; padding: 4px 0;
+}
+.settings-chevron { transition: transform 0.2s; color: var(--muted); }
+.settings-chevron.open { transform: rotate(90deg); }
+.settings-expand-body { padding-top: 8px; }
+
+/* Toggle switch */
+.switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background: #ccc; border-radius: 26px; transition: 0.2s;
+}
+.switch-slider::before {
+  content: ''; position: absolute; height: 20px; width: 20px;
+  left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s;
+}
+.switch input:checked + .switch-slider { background: var(--green); }
+.switch input:checked + .switch-slider::before { transform: translateX(20px); }
+
+/* Delete dialog */
+#delDialogOptions button { text-align: left; padding: 10px 14px; font-size: 14px; }
+#delFuture:hover { background: #fff2d6; border-color: #f5c563; }
+#delAll:hover    { background: #ffe5e5; border-color: #ffb3b3; }
+#delNone:hover   { background: #eef7ff; border-color: #a9d2ff; }
