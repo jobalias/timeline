@@ -104,8 +104,16 @@
   --prog-day-width: 160px; --prog-min-height: 55vh;
   --sched-hour-px: 48;
 
+  --st-name-width: 150px;
+
+  /* Grid row density */
+  --grid-row-pad: 3px 12px;        /* tighter vertical padding */
+  --grid-subtask-pad: 2px 12px;
+  --fs-badge: 9px;                 
+  --fs-subtask: 13px;
+
   /* ===== SPACING ===== */
-  --gap-sm: 8px;  --gap-md: 12px;  --gap-lg: 16px;
+  --gap-tiny: 4px; --gap-sm: 8px;  --gap-md: 12px;  --gap-lg: 16px;
 
   /* ===== EFFECTS ===== */
   --shadow-card:  0 2px 8px var(--c-shadow-10);

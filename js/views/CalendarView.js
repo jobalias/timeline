@@ -39,7 +39,6 @@ export class CalendarView {
     const task = this.store.find(taskId);
     const st = task.subtasks[subIndex];
 
-    const est = st.estHours ? ` — ${st.estHours}h needed` : '';
     this.title.innerHTML =
       `<span class="cal-task">${this._esc(task.name)}</span>
        <span class="cal-sub">▸ ${this._esc(st.name)}${est}</span>`;
