@@ -11,7 +11,7 @@ export class PlannerView {
     this.selectedSubtask = null; // { taskId, subIndex }
     this.selectedBlockEl = null; // currently clicked block DOM (for delete ✕)
     this.hideScheduled = false;
-
+    this._navBlockIndex = -1;
     const hideCb = document.getElementById('hideScheduled');
     if (hideCb) {
       hideCb.addEventListener('change', () => {
@@ -64,6 +64,16 @@ export class PlannerView {
     return date.getFullYear() === due.getFullYear() &&
            date.getMonth() === due.getMonth() &&
            date.getDate() === due.getDate();
+  }
+
+  _getSortedBlocks(st) {
+    return st.blocks
+      .filter((b) => b.date && b.start)
+      .map((b) => ({
+        block: b,
+        time: this._blockStart(b).getTime(),
+      }))
+      .sort((a, b) => a.time - b.time);
   }
 
   _highlightDueColumn() {
@@ -143,7 +153,8 @@ export class PlannerView {
         return this._isDueDate(arg.date) ? ['due-date-header'] : [];
       },
       datesSet: () => {
-        this._highlightDueColumn(); // re-apply when navigating/switching views
+        this._highlightDueColumn(); 
+        this._renderBacklog();
       },
       select: (info) => this._onSelectRange(info),
       eventDrop: (info) => this._onEventChanged(info),
@@ -156,6 +167,29 @@ export class PlannerView {
     });
 
     this.calendar.render();
+  }
+
+  _getCalendarCenterTime() {
+    const view = this.calendar.view;
+    const start = view.currentStart.getTime();
+    const end = view.currentEnd.getTime();
+    return (start + end) / 2; // midpoint of the visible range
+  }
+
+  _getBlockDays(st) {
+    const daySet = new Set();
+    st.blocks.forEach((b) => {
+      if (!b.date) return;
+      const d = new Date(b.date + 'T00:00:00');
+      daySet.add(startOfDay(d).getTime());
+    });
+    return [...daySet].sort((a, b) => a - b);
+  }
+
+  _getCenteredDay() {
+    const view = this.calendar.view;
+    const mid = (view.currentStart.getTime() + view.currentEnd.getTime()) / 2;
+    return startOfDay(new Date(mid)).getTime();
   }
 
   // ---------- event loading ----------
@@ -239,7 +273,7 @@ export class PlannerView {
     this._clearClickedBlock();
     this._renderBacklog();
     this.calendar.refetchEvents();
-    this._highlightDueColumn();   // ← add
+    this._highlightDueColumn();
     this._updateCounter();
   }
 
@@ -248,7 +282,7 @@ export class PlannerView {
     this._clearClickedBlock();
     this._renderBacklog();
     this.calendar.refetchEvents();
-    this._highlightDueColumn();   // ← add
+    this._highlightDueColumn();
     this._updateCounter();
   }
 
@@ -294,7 +328,7 @@ export class PlannerView {
   }
 
   // ---------- drag/resize existing block ----------
-async _onEventChanged(info) {
+  async _onEventChanged(info) {
     const p = info.event.extendedProps;
     if (p.kind !== 'block') { info.revert(); return; }
     if (!this._isSelected(p.taskId, p.subIndex)) { info.revert(); return; }
@@ -520,7 +554,8 @@ async _onEventChanged(info) {
     const card = document.createElement('div');
     card.className = 'backlog-card';
     card.style.borderTopColor = task.color;
-    if (this._isSelected(task.id, subIndex)) card.classList.add('selected');
+    const isSelected = this._isSelected(task.id, subIndex);
+    if (isSelected) card.classList.add('selected');
 
     const dueToday = !st.done && st.due && _isDueToday(st);
     if (dueToday) card.classList.add('due-today');
@@ -536,13 +571,95 @@ async _onEventChanged(info) {
       ? `<span class="card-due due-today-text">⚠️ Due today</span>`
       : (st.due ? `<span class="card-due">Due ${this._fmtDue(st.due)}</span>` : '');
 
+    // nav arrows (only when selected + has blocks), based on current calendar center
+    let navHtml = '';
+    const blockDays = this._getBlockDays(st);
+
+    if (isSelected && blockDays.length > 0) {
+      const centeredDay = this._getCenteredDay();
+      const hasPrev = blockDays.some((d) => d < centeredDay);
+      const hasNext = blockDays.some((d) => d > centeredDay);
+      const blockCount = st.blocks.filter((b) => b.date && b.start).length;
+
+      navHtml = `
+        <div class="card-nav">
+          <button class="card-nav-arrow" data-nav="prev" ${hasPrev ? '' : 'disabled'}>◀</button>
+          <span class="card-nav-label">${blockCount} block${blockCount === 1 ? '' : 's'}</span>
+          <button class="card-nav-arrow" data-nav="next" ${hasNext ? '' : 'disabled'}>▶</button>
+        </div>`;
+    }
+
     card.innerHTML = `
+      ${navHtml}
       <div class="card-task" style="color:${task.color};">${this._esc(task.name)}</div>
       <div class="card-sub">${this._esc(st.name)}</div>
       <div class="card-meta">${statusHtml}${dueHtml}</div>`;
 
-    card.addEventListener('click', () => this._selectSubtask(task.id, subIndex));
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.card-nav-arrow')) return;
+      this._selectSubtask(task.id, subIndex);
+    });
+
+    card.querySelectorAll('.card-nav-arrow').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (btn.disabled) return;
+        this._navigateRelative(st, btn.dataset.nav);
+      });
+    });
+
     return card;
+  }
+
+  _navigateRelative(st, direction) {
+    const blockDays = this._getBlockDays(st);
+    if (blockDays.length === 0) return;
+
+    const centeredDay = this._getCenteredDay();
+
+    let targetDay;
+    if (direction === 'next') {
+      targetDay = blockDays.find((d) => d > centeredDay);
+    } else {
+      const earlier = blockDays.filter((d) => d < centeredDay);
+      targetDay = earlier.length ? earlier[earlier.length - 1] : null;
+    }
+
+    if (targetDay == null) return;
+
+    this._gotoDateCentered(new Date(targetDay));
+    setTimeout(() => this._renderBacklog(), 50);
+  }
+
+  // Navigate so the target date is centered in the current view
+  _gotoDateCentered(date) {
+    const viewType = this.calendar.view.type;
+
+    if (viewType === 'timeGridWeek' || viewType === 'dayGridMonth') {
+      // for week view: go to ~3 days before so the target is mid-week
+      const centered = new Date(date);
+      centered.setDate(centered.getDate() - 3);
+      this.calendar.gotoDate(centered);
+    } else {
+      // day view: just go to the date
+      this.calendar.gotoDate(date);
+    }
+  }
+
+  // Optional: flash the target block so you can spot it
+  _flashBlock(block) {
+    setTimeout(() => {
+      const events = this.calendar.getEvents();
+      const target = events.find((ev) => {
+        const p = ev.extendedProps;
+        return p.kind === 'block' &&
+          Math.abs(ev.start.getTime() - this._blockStart(block).getTime()) < 1000;
+      });
+      if (target && target.el) {
+        target.el.classList.add('block-flash');
+        setTimeout(() => target.el.classList.remove('block-flash'), 1000);
+      }
+    }, 100);
   }
 
   // ---------- hours counter (in planner toolbar) ----------
