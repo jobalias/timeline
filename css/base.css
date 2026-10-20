@@ -1,54 +1,37 @@
-/* ===== BASE: variables, reset, buttons, inputs, toolbar ===== */
-:root {
-  --bg: #f7f7f9;
-  --panel: #ffffff;
-  --border: #e2e2e8;
-  --text: #1c1c1e;
-  --muted: #8e8e93;
-  --accent: #0a84ff;
-  --fill: #0a84ff;
-  --today: #ffcc00;
-  --green: #34c759;
-}
-
+/* ===== BASE ===== */
 * { box-sizing: border-box; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-main);
   margin: 0;
   background: var(--bg);
   color: var(--text);
   padding: clamp(12px, 3vw, 24px);
 }
 
-h1 { font-size: 22px; margin: 0 0 16px; }
+h1 { font-size: var(--fs-h1); margin: 0 0 var(--gap-lg); }
 
 button {
   font: inherit; padding: 8px 14px;
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--panel); cursor: pointer;
 }
-button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-button.green   { background: var(--green);  color: #fff; border-color: var(--green); }
+button.primary { background: var(--accent); color: var(--c-white); border-color: var(--accent); }
+button.green   { background: var(--green);  color: var(--c-white); border-color: var(--green); }
 button:hover   { filter: brightness(0.97); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-label {
-  display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px;
-}
+label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
 input[type=text], input[type=date], input[type=time], input[type=number] {
   width: 100%; font: inherit; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius);
 }
 
-.toolbar {
-  display: flex; gap: 8px; margin-bottom: 20px;
-  flex-wrap: wrap; align-items: center;
-}
+.toolbar { display: flex; gap: var(--gap-sm); margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
 .auth-status { font-size: 13px; color: var(--muted); margin-left: auto; }
 .auth-status.connected { color: var(--green); }
 
-.hint  { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.hint  { font-size: var(--fs-small); color: var(--muted); margin-top: 6px; }
 .empty { text-align: center; color: var(--muted); padding: 40px; }
 
 #settingsBtn { font-size: 16px; padding: 8px 12px; }

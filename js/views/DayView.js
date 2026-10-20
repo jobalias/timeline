@@ -1,4 +1,5 @@
 import { startOfDay, sameDay, parseYmd } from '../utils.js';
+import { cssVar } from '../theme.js';
 
 export class DayView {
   constructor(store, googleCalendar, settings) {
@@ -76,7 +77,7 @@ export class DayView {
   }
 
   _renderGrid(taskBlocks, blockEventIds = new Set()) {
-    const HOUR_PX = 50;
+    const HOUR_PX = cssVar('--dayview-hour-px', 44);
     let html = '<div class="dv-grid">';
 
     // hour lines + labels

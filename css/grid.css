@@ -1,120 +1,107 @@
-/* ===== GRID VIEW: table, rows, cells, sticky headers, nav ===== */
+/* ===== GRID VIEW ===== */
 .grid-wrap {
-  overflow: auto;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 8px;
-  max-height: 75vh;
+  overflow: auto; background: var(--panel);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: var(--gap-sm); max-height: var(--grid-max-height);
 }
 .grid-wrap td, .grid-wrap th { contain: layout style; }
 
 table { border-collapse: collapse; }
-th, td { text-align: center; font-size: 12px; white-space: nowrap; }
+th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 
 .label-col {
   text-align: left; padding: 6px 12px;
   position: sticky; left: 0; background: var(--panel); z-index: 2;
-  min-width: 220px; border-right: 2px solid var(--border);
+  min-width: var(--grid-label-width); border-right: 2px solid var(--border);
 }
 
-/* Task row */
 .task-name {
-  font-weight: 600; font-size: 14px;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-weight: 600; font-size: var(--fs-body);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--gap-sm);
 }
 .task-btns { display: flex; gap: 2px; flex-shrink: 0; }
-.task-edit, .task-del { padding: 2px 6px; font-size: 12px; border-radius: 6px; line-height: 1; }
-.task-del:hover { background: #ffe5e5; border-color: #ffb3b3; }
+.task-edit, .task-del { padding: 2px 6px; font-size: var(--fs-small); border-radius: 6px; line-height: 1; }
+.task-del:hover { background: var(--del-hover-bg); border-color: var(--del-hover-border); }
 .task-done .task-title { color: var(--muted); font-style: italic; }
 
-/* Subtask row */
 .subtask-name {
   padding-left: 16px; color: var(--muted);
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--gap-sm);
 }
-.st-left  { display: flex; align-items: center; gap: 8px; }
+.st-left  { display: flex; align-items: center; gap: var(--gap-sm); }
 .st-label { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
 .st-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .done-check { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
 .subtask-done .st-label { text-decoration: line-through; color: var(--muted); }
 
-/* Minimized (waiting) */
 .subtask-waiting { opacity: 0.6; }
 .subtask-waiting .st-label { font-style: italic; }
 .ball-dot {
-  background: transparent; border: none; font-size: 12px; line-height: 1;
+  background: transparent; border: none; font-size: var(--fs-small); line-height: 1;
   cursor: pointer; padding: 2px; border-radius: 6px; opacity: 0.6;
 }
-.ball-dot:hover { opacity: 1; background: rgba(0,0,0,0.06); }
+.ball-dot:hover { opacity: 1; background: var(--hover-row); }
 
-/* Note indicator */
 .note-dot { position: absolute; top: 2px; left: 8px; width: 8px; height: 8px; pointer-events: none; }
-.note-dot::before { content: '📝'; }
+.note-dot::before { content: var(--icon-note); }
 .note-badge { font-size: 11px; margin-left: 4px; opacity: 0.7; cursor: default; }
 
-/* Clock button */
 .sched-btn { padding: 2px 8px; font-size: 11px; border-radius: 6px; }
-.clock-pending { background: #ffb340; border-color: #f59e0b; }
-.clock-pending:hover { background: #ffa726; }
-.clock-full { background: #34c759; border-color: #2fb350; color: #fff; }
-.clock-done { background: #e5e5ea; border-color: #d1d1d6; opacity: 0.6; }
+.clock-pending { background: var(--clock-pending-bg); border-color: var(--clock-pending-border); }
+.clock-pending:hover { background: var(--clock-pending-hover); }
+.clock-full { background: var(--green); border-color: var(--clock-full-border); color: var(--c-white); }
+.clock-done { background: var(--clock-done-bg); border-color: var(--c-gray-350); opacity: 0.6; }
 
-/* Allocation badge */
 .alloc-badge {
-  font-size: 10px; font-weight: 600; padding: 1px 6px;
+  font-size: var(--fs-tiny); font-weight: 600; padding: 1px 6px;
   border-radius: 5px; text-transform: uppercase; letter-spacing: 0.02em;
 }
-.alloc-badge.pending { background: #fff2d6; color: #b7791f; }
-.alloc-badge.done    { background: #d6f5df; color: var(--green); }
+.alloc-badge.pending { background: var(--pending-bg); color: var(--pending-text); }
+.alloc-badge.done    { background: var(--done-bg); color: var(--done-text); }
 
-/* Day header + cells */
-.day-head { padding: 4px 2px; min-width: 34px; color: var(--muted); font-weight: 500; }
-.dow { font-size: 10px; display: block; color: var(--muted); }
+.day-head { padding: 4px 2px; min-width: var(--grid-cell-size); color: var(--muted); font-weight: 500; }
+.dow { font-size: var(--fs-tiny); display: block; color: var(--muted); }
 
-.cell { width: 34px; height: 34px; border: 1px solid #ededf2; position: relative; }
-.cell.weekend { background: #fafafc; }
+.cell { width: var(--grid-cell-size); height: var(--grid-cell-size); border: 1px solid var(--cell-border); position: relative; }
+.cell.weekend { background: var(--cell-weekend); }
 .cell.today { box-shadow: inset 0 0 0 2px var(--today); }
 .cell .square { position: absolute; inset: 5px; border-radius: 5px; }
 .cell.due .square { background: transparent; display: flex; align-items: center; justify-content: center; }
-.cell.due .square::after { content: "✕"; color: #ff3b30; font-weight: 700; font-size: 18px; }
+.cell.due .square::after { content: "✕"; color: var(--danger); font-weight: 700; font-size: 18px; }
 .cell-done .square { opacity: 0.35; }
 
 .hours-centered {
   display: flex; align-items: center; justify-content: center;
-  width: 100%; height: 100%; font-size: 12px; font-weight: 700; color: var(--accent);
+  width: 100%; height: 100%; font-size: var(--fs-small); font-weight: 700; color: var(--accent);
 }
 .cell-done .hours-centered { color: var(--muted); opacity: 0.5; }
 
-/* Due-today emphasis */
-.subtask-name.due-today { background: rgba(255, 59, 48, 0.08); }
+.subtask-name.due-today { background: var(--due-col-bg); }
 .due-today-badge {
   display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700;
-  color: #fff; background: #ff3b30; padding: 2px 8px; border-radius: 6px;
+  color: var(--c-white); background: var(--danger); padding: 2px 8px; border-radius: 6px;
   animation: due-pulse 1.5s ease-in-out infinite;
 }
 
-/* Sticky header layering */
 .month-head {
   padding: 6px 4px; font-size: 13px; font-weight: 700; color: var(--text);
-  background: #f0f0f4; border-left: 2px solid var(--border);
+  background: var(--neutral-bg); border-left: 2px solid var(--border);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 5; text-align: left; overflow: hidden;
 }
 .month-label { display: inline-block; padding-left: 6px; white-space: nowrap; will-change: transform; }
 .month-corner { position: sticky; left: 0; top: 0; z-index: 7; background: var(--panel); border-bottom: 1px solid var(--border); }
-.grid-wrap .day-head { position: sticky; top: 33px; z-index: 4; background: var(--panel); }
-.grid-wrap .day-head.weekend { background: #f0f0f4; }
-.grid-wrap .day-head.today   { background: var(--today); color: #000; border-radius: 6px; }
-.grid-wrap thead .label-col  { position: sticky; left: 0; top: 33px; z-index: 6; background: var(--panel); }
+.grid-wrap .day-head { position: sticky; top: var(--month-row-height); z-index: 4; background: var(--panel); }
+.grid-wrap .day-head.weekend { background: var(--weekend-bg); }
+.grid-wrap .day-head.today   { background: var(--today); color: var(--c-black); border-radius: 6px; }
+.grid-wrap thead .label-col  { position: sticky; left: 0; top: var(--month-row-height); z-index: 6; background: var(--panel); }
 
-/* Grid window nav */
-.grid-nav { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-.grid-nav button { font-size: 13px; padding: 6px 14px; border-radius: 8px; }
+.grid-nav { display: flex; gap: var(--gap-sm); align-items: center; margin-bottom: var(--gap-md); }
+.grid-nav button { font-size: 13px; padding: 6px 14px; border-radius: var(--radius); }
 #gridToday { font-weight: 600; }
 
 @media (max-width: 600px) {
-  .label-col { min-width: 150px; }
-  .day-head { min-width: 30px; }
-  .cell { width: 30px; height: 30px; }
+  .label-col { min-width: var(--grid-label-width-mobile); }
+  .day-head { min-width: var(--grid-cell-size-mobile); }
+  .cell { width: var(--grid-cell-size-mobile); height: var(--grid-cell-size-mobile); }
 }

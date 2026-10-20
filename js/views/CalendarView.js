@@ -1,8 +1,9 @@
 import { TimeBlock } from '../models/Subtask.js';
 import { startOfDay, sameDay } from '../utils.js';
+import { cssVar } from '../theme.js';
 
-const SLOT_MIN = 15;          // snap granularity (minutes)
-const HOUR_PX = 48;           // pixel height of one hour
+const SLOT_MIN = 15;
+const HOUR_PX = cssVar('--sched-hour-px', 48);   
 const PX_PER_MIN = HOUR_PX / 60;
 
 export class CalendarView {

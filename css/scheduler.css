@@ -1,4 +1,4 @@
-/* ===== FULL-SCREEN CALENDAR SCHEDULER (CalendarView) ===== */
+/* ===== FULL-SCREEN CALENDAR SCHEDULER ===== */
 .cal-overlay {
   position: fixed; inset: 0; background: var(--bg);
   z-index: 50; display: none; flex-direction: column;
@@ -6,29 +6,28 @@
 .cal-overlay.open { display: flex; }
 
 .cal-header {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: var(--gap-md);
   padding: 12px 16px; background: var(--panel);
   border-bottom: 1px solid var(--border); flex-wrap: wrap;
 }
 .cal-title { font-size: 17px; font-weight: 600; }
 .cal-title .cal-task { font-weight: 700; }
-.cal-title .cal-sub {
-  margin-left: 8px; font-weight: 500; color: var(--accent); font-size: 15px;
-}
+.cal-title .cal-sub { margin-left: 8px; font-weight: 500; color: var(--accent); font-size: 15px; }
+
 .cal-counter {
-  font-size: 14px; font-weight: 600; padding: 6px 12px;
-  background: #f0f0f4; border-radius: 8px;
+  font-size: var(--fs-body); font-weight: 600; padding: 6px 12px;
+  background: var(--neutral-bg); border-radius: var(--radius);
 }
-.cal-counter.done { background: #d6f5df; color: var(--green); }
+.cal-counter.done { background: var(--done-bg); color: var(--green); }
 .cal-nav { display: flex; gap: 6px; }
-.cal-actions { display: flex; gap: 8px; margin-left: auto; }
+.cal-actions { display: flex; gap: var(--gap-sm); margin-left: auto; }
 
 .cal-close-x {
-  background: transparent; border: none; color: #ff3b30;
+  background: transparent; border: none; color: var(--danger);
   font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer;
-  padding: 4px 10px; border-radius: 8px; margin-left: 8px;
+  padding: 4px 10px; border-radius: var(--radius); margin-left: 8px;
 }
-.cal-close-x:hover { background: #ffe5e5; }
+.cal-close-x:hover { background: var(--del-hover-bg); }
 
 .cal-grid-wrap { flex: 1; overflow: auto; position: relative; }
 
@@ -47,39 +46,32 @@
 
 .cal-time-label {
   font-size: 11px; color: var(--muted); text-align: right;
-  padding: 0 6px; height: 48px; position: relative; top: -6px;
+  padding: 0 6px; height: calc(var(--sched-hour-px) * 1px); position: relative; top: -6px;
 }
 .cal-daycol { position: relative; border-left: 1px solid var(--border); }
-.cal-hour-cell { height: 48px; border-bottom: 1px solid #eef0f3; cursor: pointer; }
-.cal-hour-cell:hover { background: rgba(10,132,255,0.04); }
+.cal-hour-cell { height: calc(var(--sched-hour-px) * 1px); border-bottom: 1px solid var(--hour-line); cursor: pointer; }
+.cal-hour-cell:hover { background: var(--hover-cell-cal); }
 
-/* Busy (external) events */
 .cal-event {
   position: absolute; left: 2px; right: 2px;
-  background: #c7c7cc; color: #3a3a3c;
+  background: var(--busy-bg); color: var(--busy-text);
   border-radius: 6px; padding: 2px 6px; font-size: 11px;
-  overflow: hidden; pointer-events: none; border-left: 3px solid #8e8e93;
+  overflow: hidden; pointer-events: none; border-left: 3px solid var(--busy-border);
 }
-/* App-block context (other subtasks) */
 .cal-event-app {
-  background: #d8e8ff !important;
-  border-left-color: #0a84ff !important;
-  color: #0a4a8f !important;
+  background: var(--app-block-bg) !important;
+  border-left-color: var(--accent) !important;
+  color: var(--app-block-text) !important;
 }
 
-/* Your placed work blocks */
 .cal-block {
   position: absolute; left: 2px; right: 2px;
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--c-white);
   border-radius: 6px; padding: 2px 6px; font-size: 11px;
-  overflow: hidden; cursor: move; border-left: 3px solid #0060df;
+  overflow: hidden; cursor: move; border-left: 3px solid var(--accent-dark);
 }
-.cal-block .resize-handle {
-  position: absolute; bottom: 0; left: 0; right: 0; height: 8px; cursor: ns-resize;
-}
-.cal-block .block-del {
-  position: absolute; top: 1px; right: 3px; cursor: pointer; font-weight: 700; opacity: 0.8;
-}
+.cal-block .resize-handle { position: absolute; bottom: 0; left: 0; right: 0; height: 8px; cursor: ns-resize; }
+.cal-block .block-del { position: absolute; top: 1px; right: 3px; cursor: pointer; font-weight: 700; opacity: 0.8; }
 .cal-block .block-del:hover { opacity: 1; }
 
 .cal-loading { padding: 40px; text-align: center; color: var(--muted); }

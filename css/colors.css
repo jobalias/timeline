@@ -1,0 +1,78 @@
+/* ============================================================
+   COLORS — Raw palette. The actual color values.
+   Edit here to re-theme. Roles are assigned in theme.css.
+   ============================================================ */
+:root {
+  /* Neutrals */
+  --c-white:      #ffffff;
+  --c-gray-50:    #fafafc;
+  --c-gray-100:   #f7f7f9;
+  --c-gray-150:   #f0f0f4;
+  --c-gray-200:   #ededf2;
+  --c-gray-250:   #eef0f3;
+  --c-gray-300:   #e2e2e8;
+  --c-gray-350:   #d1d1d6;
+  --c-gray-400:   #c7c7cc;
+  --c-gray-500:   #a0a0a8;
+  --c-gray-600:   #8e8e93;
+  --c-gray-700:   #6e6e73;
+  --c-gray-800:   #48484a;
+  --c-gray-850:   #3a3a3c;
+  --c-black:      #1c1c1e;
+
+  /* Blues */
+  --c-blue:       #0a84ff;
+  --c-blue-dark:  #0060df;
+  --c-blue-50:    #eef7ff;
+  --c-blue-100:   #d8e8ff;
+  --c-blue-150:   #eef4ff;
+  --c-blue-200:   #a9d2ff;
+  --c-blue-900:   #0a4a8f;
+
+  /* Greens */
+  --c-green:      #34c759;
+  --c-green-dark: #2fb350;
+  --c-green-50:   #f0fff4;
+  --c-green-100:  #d6f5df;
+  --c-green-150:  #c6f6d5;
+  --c-green-700:  #1a7f37;
+
+  /* Reds */
+  --c-red:        #ff3b30;
+  --c-red-dark:   #cf222e;
+  --c-red-50:     #ffe5e5;
+  --c-red-100:    #ffd6d6;
+  --c-red-200:    #ffb3b3;
+
+  /* Yellows / Golds / Oranges / Browns */
+  --c-yellow:     #ffcc00;
+  --c-amber-50:   #fff4d6;
+  --c-amber-100:  #fff2d6;
+  --c-gold-100:   #ffe9a8;
+  --c-gold-200:   #ffd966;
+  --c-gold-300:   #f0b429;
+  --c-gold-400:   #f5c563;
+  --c-orange:     #ffb340;
+  --c-orange-600: #ffa726;
+  --c-orange-700: #f59e0b;
+  --c-brown-600:  #b7791f;
+  --c-brown-700:  #9a6700;
+  --c-brown-800:  #8a6d1f;
+  --c-brown-900:  #7a5c00;
+  --c-brown-950:  #5c4500;
+
+  /* Translucent overlays */
+  --c-shadow-10:   rgba(0,0,0,0.10);
+  --c-shadow-15:   rgba(0,0,0,0.15);
+  --c-shadow-30:   rgba(0,0,0,0.30);
+  --c-shadow-35:   rgba(0,0,0,0.35);
+  --c-shadow-40:   rgba(0,0,0,0.40);
+  --c-shadow-50:   rgba(0,0,0,0.50);
+  --c-overlay-06:  rgba(0,0,0,0.06);
+  --c-red-tint:    rgba(255,59,48,0.08);
+  --c-red-tint-15: rgba(255,59,48,0.15);
+  --c-red-tint-20: rgba(255,59,48,0.20);
+  --c-blue-tint:   rgba(10,132,255,0.04);
+  --c-blue-tint-15:rgba(10,132,255,0.15);
+  --c-gold-tint:   rgba(240,180,41,0.35);
+}

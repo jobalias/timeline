@@ -1,0 +1,115 @@
+/* ============================================================
+   THEME — Semantic roles + sizing/type/effects.
+   Colors reference the palette in colors.css.
+   ============================================================ */
+:root {
+  /* ===== SEMANTIC COLOR ROLES ===== */
+  /* Surfaces & text */
+  --bg:           var(--c-gray-100);
+  --panel:        var(--c-white);
+  --border:       var(--c-gray-300);
+  --text:         var(--c-black);
+  --muted:        var(--c-gray-600);
+
+  /* Brand / accents */
+  --accent:       var(--c-blue);
+  --accent-dark:  var(--c-blue-dark);
+  --green:        var(--c-green);
+  --today:        var(--c-yellow);
+  --danger:       var(--c-red);
+
+  /* Status badges */
+  --pending-bg:   var(--c-amber-100);  --pending-text: var(--c-brown-600);
+  --done-bg:      var(--c-green-100);   --done-text:    var(--c-green-700);
+  --neutral-bg:   var(--c-gray-150);    --neutral-text: var(--c-gray-600);
+  --warn-bg:      var(--c-red-100);     --warn-text:    var(--c-red-dark);
+  --saving-bg:    var(--c-amber-50);    --saving-text:  var(--c-brown-700);
+  --offline-bg:   var(--c-gray-350);    --offline-text: var(--c-gray-700);
+
+  /* Calendar events */
+  --app-block-bg: var(--c-blue-100);  --app-block-text: var(--c-blue-900);
+  --busy-bg:      var(--c-gray-400);  --busy-text:      var(--c-gray-850);
+  --busy-border:  var(--c-gray-600);
+
+  /* Gold celebration */
+  --gold-1:       var(--c-amber-50);
+  --gold-2:       var(--c-gold-100);
+  --gold-3:       var(--c-gold-200);
+  --gold-border:  var(--c-gold-300);
+  --gold-header:  var(--c-brown-900);
+  --gold-label:   var(--c-brown-600);
+  --gold-text:    var(--c-brown-950);
+  --gold-hours:   var(--c-brown-800);
+
+  /* Clock button */
+  --clock-pending-bg:     var(--c-orange);
+  --clock-pending-border: var(--c-orange-700);
+  --clock-pending-hover:  var(--c-orange-600);
+  --clock-full-border:    var(--c-green-dark);
+  --clock-done-bg:        var(--c-gray-350);
+
+  /* Cells / weekend / lines */
+  --weekend-bg:   var(--c-gray-150);
+  --cell-weekend: var(--c-gray-50);
+  --cell-border:  var(--c-gray-200);
+  --hour-line:    var(--c-gray-250);
+
+  /* Hover tints */
+  --hover-row:        var(--c-overlay-06);
+  --hover-cell-cal:   var(--c-blue-tint);
+  --del-hover-bg:     var(--c-red-50);
+  --del-hover-border: var(--c-red-200);
+  --future-hover-bg:     var(--c-amber-100);
+  --future-hover-border: var(--c-gold-400);
+  --none-hover-bg:       var(--c-blue-50);
+  --none-hover-border:   var(--c-blue-200);
+
+  /* Due-date highlights */
+  --due-col-bg:    var(--c-red-tint);
+  --due-header-bg: var(--c-red-tint-15);
+
+  /* Progress chips */
+  --chip-bg:     var(--c-green-50);
+  --chip-border: var(--c-green-150);
+
+  /* Scrollbar */
+  --scrollbar-track: var(--c-gray-150);
+  --scrollbar-thumb: var(--c-gray-400);
+  --scrollbar-hover: var(--c-gray-500);
+
+  /* Login gradient */
+  --login-grad-1: var(--c-blue-150);
+  --login-grad-2: var(--c-gray-100);
+
+  /* Misc surfaces */
+  --subtask-row-bg: var(--c-gray-50);
+  --backdrop:       var(--c-shadow-35);
+
+  /* ===== TYPOGRAPHY ===== */
+  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --fs-h1: 22px;  --fs-body: 14px;  --fs-small: 12px;  --fs-tiny: 10px;
+
+  /* ===== ICONS ===== */
+  --icon-note: '📝';
+
+  /* ===== SIZING ===== */
+  --radius: 8px;  --radius-lg: 14px;  --radius-pill: 20px;
+
+  --grid-cell-size: 34px;          --grid-cell-size-mobile: 30px;
+  --grid-label-width: 220px;       --grid-label-width-mobile: 150px;
+  --grid-max-height: 75vh;         --month-row-height: 33px;
+
+  --dayview-width: 280px;  --dayview-height: 75vh;  --dayview-hour-px: 44;
+  --planner-height: 80vh;  --backlog-card-width: 180px;  --fc-slot-height: 3em;
+  --prog-day-width: 160px; --prog-min-height: 55vh;
+  --sched-hour-px: 48;
+
+  /* ===== SPACING ===== */
+  --gap-sm: 8px;  --gap-md: 12px;  --gap-lg: 16px;
+
+  /* ===== EFFECTS ===== */
+  --shadow-card:  0 2px 8px var(--c-shadow-10);
+  --shadow-modal: 0 8px 40px rgba(0,0,0,0.08);
+  --shadow-block: 0 1px 3px var(--c-shadow-15);
+  --transition: 0.2s;
+}
