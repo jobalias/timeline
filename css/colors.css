@@ -1,96 +1,97 @@
 :root {
-  /* Neutrals — clean bright paper, whisper of warmth */
+  /* Neutrals — clean, faint warmth (de-beiged) */
   --c-white:      #ffffff;
-  --c-gray-50:    #fbfbfa;
-  --c-gray-100:   #f7f6f3;   /* main bg — bright warm-white */
-  --c-gray-150:   #f1f0ec;
-  --c-gray-200:   #e9e8e3;
-  --c-gray-250:   #e3e2dc;
-  --c-gray-300:   #dcdad3;   /* borders */
-  --c-gray-350:   #c9c6bd;
-  --c-gray-400:   #aeaaa0;
-  --c-gray-500:   #87837a;
-  --c-gray-600:   #6a665e;   /* muted text */
-  --c-gray-700:   #4b4842;
-  --c-gray-800:   #363430;
-  --c-gray-850:   #2d2b28;
-  --c-black:      #26241f;   /* warm charcoal ink */
+  --c-gray-50:    #fbfaf8;
+  --c-gray-100:   #f4f2ed;   /* main bg — soft, barely-warm gray (not cream) */
+  --c-gray-150:   #edeae3;
+  --c-gray-200:   #e4e0d7;
+  --c-gray-250:   #dcd8cd;
+  --c-gray-300:   #d0cabd;   /* borders — soft neutral */
+  --c-gray-350:   #bbb3a2;
+  --c-gray-400:   #9f9684;
+  --c-gray-500:   #807865;
+  --c-gray-600:   #655d4d;   /* muted text */
+  --c-gray-700:   #463524;
+  --c-gray-800:   #3e2f22;
+  --c-gray-850:   #33261b;
+  --c-black:      #2a1d12;
 
-  /* Primary accent — deep muted green (grounded, confident) */
-  --c-blue:       #3f7d5c;   /* yes it's named "blue" but it's our green accent */
-  --c-blue-dark:  #336449;
-  --c-blue-50:    #eef4f0;
-  --c-blue-100:   #dce9e1;
-  --c-blue-150:   #e8f0ea;
-  --c-blue-200:   #b4d2c0;
-  --c-blue-900:   #284d39;
+  /* Primary accent — forest/olive green (the board's hero) */
+  --c-blue:       #4a6b2f;   /* mid forest green — primary accent */
+  --c-blue-dark:  #3a5424;   /* deep olive — hover/active */
+  --c-blue-50:    #f1f4ea;
+  --c-blue-100:   #dde7c9;
+  --c-blue-150:   #e7edd6;
+  --c-blue-200:   #bcce9a;   /* soft sage */
+  --c-blue-900:   #2b3d1a;   /* deep forest */
 
-  /* Green (status: done/synced) — same family, slightly brighter */
-  --c-green:      #4a8c63;
-  --c-green-dark: #3c7452;
-  --c-green-50:   #eff5f1;
-  --c-green-100:  #dbeae0;
-  --c-green-150:  #c8ddd0;
-  --c-green-700:  #2f5c41;
+  /* Green (status: done/synced) — brighter grass green */
+  --c-green:      #5a8a2e;   /* lively green */
+  --c-green-dark: #497325;
+  --c-green-50:   #f2f6ea;
+  --c-green-100:  #deebc9;
+  --c-green-150:  #cae0a8;   /* pale spring green */
+  --c-green-700:  #3a5c1c;
 
-  /* Red — soft clay (warnings, due ✕) */
-  --c-red:        #c05f4a;
-  --c-red-dark:   #a54c39;
-  --c-red-50:     #f8ebe6;
-  --c-red-100:    #f1ddd5;
-  --c-red-200:    #e0b8ab;
+  /* Red — deep brick/rust (strongest warnings, due ✕) */
+  --c-red:        #a8402a;   /* brick red */
+  --c-red-dark:   #8a3220;
+  --c-red-50:     #f6e7e2;
+  --c-red-100:    #eed3ca;
+  --c-red-200:    #dba897;
 
-  /* Gold / amber (highlights, today) */
-  --c-yellow:     #e0b64a;
-  --c-amber-50:   #f8f1df;
-  --c-amber-100:  #f3e8cd;
-  --c-gold-100:   #ecdcac;
-  --c-gold-200:   #ddc47e;
-  --c-gold-300:   #c9a84e;
-  --c-gold-400:   #d4b968;
-  --c-orange:     #d49a5a;
-  --c-orange-600: #c48a48;
-  --c-orange-700: #aa743a;
-  --c-brown-600:  #8a6a38;
-  --c-brown-700:  #735628;
-  --c-brown-800:  #5f4720;
-  --c-brown-900:  #4d3a1b;
-  --c-brown-950:  #3a2c14;
+  /* Coral / warm — soft salmon accent (friendly highlights, pending) */
+  --c-orange:     #e8906f;   /* soft coral */
+  --c-orange-600: #dd7f5c;
+  --c-orange-700: #c96a48;
+  --c-yellow:     #d9a94a;   /* warm honey (today highlight) */
+  --c-amber-50:   #f8f0e4;
+  --c-amber-100:  #f3e6d2;
+  --c-gold-100:   #ecd9b4;
+  --c-gold-200:   #dcc088;
+  --c-gold-300:   #c9a456;
+  --c-gold-400:   #d4b56a;
 
-  /* Overlays — neutral, barely warm */
-  --c-shadow-10:   rgba(50,45,35,0.07);
-  --c-shadow-15:   rgba(50,45,35,0.11);
-  --c-shadow-30:   rgba(45,40,30,0.26);
-  --c-shadow-35:   rgba(45,40,30,0.32);
-  --c-shadow-40:   rgba(45,40,30,0.38);
-  --c-shadow-50:   rgba(40,35,25,0.48);
-  --c-overlay-06:  rgba(50,45,35,0.05);
-  --c-red-tint:    rgba(192,95,74,0.07);
-  --c-red-tint-15: rgba(192,95,74,0.14);
-  --c-red-tint-20: rgba(192,95,74,0.20);
-  --c-blue-tint:   rgba(63,125,92,0.05);
-  --c-blue-tint-15:rgba(63,125,92,0.15);
-  --c-gold-tint:   rgba(212,169,74,0.28);
+  /* Browns — warm earth tones (celebration golds, deep text) */
+  --c-brown-600:  #8a6a40;
+  --c-brown-700:  #73542c;
+  --c-brown-800:  #5f441f;
+  --c-brown-900:  #4d3818;
+  --c-brown-950:  #3a2a12;
 
-  /* ===== TASK PALETTE — brighter, cheerful tags ===== */
-  --task-01: #ef5a3a;  /* bright rust red */
-  --task-02: #5fae4e;  /* leaf green */
-  --task-03: #f58a2e;  /* bright pumpkin */
-  --task-04: #2fab9a;  /* teal */
-  --task-05: #e04a2f;  /* vivid brick */
-  --task-06: #f5b428;  /* golden amber */
-  --task-07: #ff8c3a;  /* tangerine orange */
-  --task-08: #3f9e86;  /* deep jade */
-  --task-09: #d84b3c;  /* coral brick */
-  --task-10: #eaa520;  /* harvest gold */
-  --task-11: #7cb342;  /* olive leaf */
-  --task-12: #f27a3a;  /* clay orange */
-  --task-13: #c77a3a;  /* warm copper */
-  --task-14: #a3b53a;  /* chartreuse */
-  --task-15: #e86a2d;  /* burnt orange */
-  --task-16: #4a90b8;  /* harvest blue */
-  --task-17: #f0b81e;  /* marigold gold */
-  --task-18: #c05e38;  /* cinnamon */
-  --task-19: #8faa38;  /* mossy lime */
-  --task-20: #dd4f38;  /* deep red-orange */
-}
+  /* Overlays — warm-neutral depth */
+  --c-shadow-10:   rgba(50,40,25,0.07);
+  --c-shadow-15:   rgba(50,40,25,0.11);
+  --c-shadow-30:   rgba(45,35,20,0.26);
+  --c-shadow-35:   rgba(45,35,20,0.32);
+  --c-shadow-40:   rgba(45,35,20,0.38);
+  --c-shadow-50:   rgba(40,30,18,0.48);
+  --c-overlay-06:  rgba(50,40,25,0.05);
+  --c-red-tint:    rgba(168,64,42,0.07);
+  --c-red-tint-15: rgba(168,64,42,0.14);
+  --c-red-tint-20: rgba(168,64,42,0.20);
+  --c-blue-tint:   rgba(74,107,47,0.05);
+  --c-blue-tint-15:rgba(74,107,47,0.15);
+  --c-gold-tint:   rgba(217,169,74,0.28);
+
+  /* ===== TASK PALETTE — diverse, evenly spread hues ===== */
+  --task-01: #c0392b;  /* red */
+  --task-02: #2e8b57;  /* sea green */
+  --task-03: #8e44ad;  /* violet */
+  --task-04: #e8803a;  /* orange */
+  --task-05: #2980b9;  /* blue */
+  --task-06: #d81b7a;  /* magenta */
+  --task-07: #7c9a3a;  /* olive green */
+  --task-08: #e0a92e;  /* golden yellow */
+  --task-09: #16a085;  /* teal */
+  --task-10: #c0564a;  /* brick/salmon */
+  --task-11: #6b4a9e;  /* purple */
+  --task-12: #4a7c2f;  /* forest green */
+  --task-13: #e85a8a;  /* pink */
+  --task-14: #3a7ca5;  /* steel blue */
+  --task-15: #d4762e;  /* pumpkin */
+  --task-16: #5aad6e;  /* mint green */
+  --task-17: #923c5e;  /* berry */
+  --task-18: #b59a2e;  /* ochre gold */
+  --task-19: #9b59b6;  /* light purple */
+  --task-20: #cf5540;  /* coral rust */

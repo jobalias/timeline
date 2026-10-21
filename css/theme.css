@@ -28,7 +28,7 @@
 
   /* Calendar events */
   --app-block-bg: var(--c-blue-100);  --app-block-text: var(--c-blue-900);
-  --busy-bg:      var(--c-gray-400);  --busy-text:      var(--c-gray-850);
+  --busy-bg:      var(--c-gold-100);  --busy-text:      var(--c-gray-850);
   --busy-border:  var(--c-gray-600);
 
   /* Gold celebration */

@@ -1,8 +1,12 @@
 /* ===== GRID VIEW (compact) ===== */
 .grid-wrap {
-  overflow: auto; background: var(--panel);
-  border: 1px solid var(--border); border-radius: var(--radius-lg);
-  padding: var(--gap-sm); max-height: var(--grid-max-height);
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--gap-sm);
+  padding-left: 0;              /* ← no left padding, so sticky col is flush */
+  max-height: var(--grid-max-height);
 }
 .grid-wrap td, .grid-wrap th { contain: layout style; }
 
@@ -41,24 +45,28 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 
 /* ===== Row tinting + spine (via .task-tr / .subtask-tr on <tr>) ===== */
 
-/* Task header rows */
-.task-tr .label-col {
-  padding: 8px 12px 2px 14px;   /* asymmetric: space above group, tight below */
-  background: color-mix(in srgb, var(--task-color) 10%, var(--panel));
-  box-shadow: inset 3px 0 0 var(--task-color);
-}
-.task-tr .cell {
-  background: color-mix(in srgb, var(--task-color) 7%, var(--panel));
+/* Spine via inset shadow — stays locked to the sticky label column during scroll */
+.task-tr .label-col,
+.subtask-tr .label-col {
+  box-shadow: inset 3px 0 0 0 var(--task-color);
 }
 
-/* Subtask rows */
+.task-tr .label-col {
+  background: color-mix(in srgb, var(--task-color) 12%, var(--panel));
+  padding: 8px 12px 2px 14px;
+}
 .subtask-tr .label-col {
-  padding: 0;
   background: color-mix(in srgb, var(--task-color) 7%, var(--panel));
-  box-shadow: inset 3px 0 0 var(--task-color);
+  padding: 0;
+}
+.task-tr .cell {
+  background: color-mix(in srgb, var(--task-color) 6%, var(--panel));
 }
 .subtask-tr .cell {
-  background: color-mix(in srgb, var(--task-color) 5%, var(--panel));
+  background: color-mix(in srgb, var(--task-color) 4%, var(--panel));
+}
+.cell.weekend {
+  background: color-mix(in srgb, var(--task-color) 5%, var(--weekend-bg));
 }
 
 /* Continuous horizontal lines across every row */
@@ -145,9 +153,7 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   width: var(--grid-cell-size); height: 22px;
   border: 1px solid var(--cell-border); position: relative;
 }
-.cell.weekend {
-  background: color-mix(in srgb, var(--task-color) 5%, var(--weekend-bg));
-}
+
 .cell.today { box-shadow: inset 0 0 0 2px var(--today); }
 
 .cell .square { position: absolute; inset: 6px; border-radius: 4px; }
