@@ -85,15 +85,16 @@
   --subtask-row-bg: var(--c-gray-50);
   --backdrop:       var(--c-shadow-35);
 
-  /* ===== TYPOGRAPHY ===== */
-  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --fs-h1: 22px;  --fs-body: 14px;  --fs-small: 12px;  --fs-tiny: 10px;
-
+ /* ===== TYPOGRAPHY ===== */
+  --font-main:  "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Spectral", Georgia, serif;   /* title only */
+  --fs-h1: 24px;  --fs-body: 14px;  --fs-small: 12px;  --fs-tiny: 10px;
+  
   /* ===== ICONS ===== */
   --icon-note: '📝';
 
-  /* ===== SIZING ===== */
-  --radius: 8px;  --radius-lg: 14px;  --radius-pill: 20px;
+/* ===== SIZING ===== */
+  --radius: 10px;  --radius-lg: 16px;  --radius-pill: 20px;
 
   --grid-cell-size: 34px;          --grid-cell-size-mobile: 30px;
   --grid-label-width: 220px;       --grid-label-width-mobile: 150px;
@@ -115,9 +116,9 @@
   /* ===== SPACING ===== */
   --gap-tiny: 4px; --gap-sm: 8px;  --gap-md: 12px;  --gap-lg: 16px;
 
-  /* ===== EFFECTS ===== */
-  --shadow-card:  0 2px 8px var(--c-shadow-10);
-  --shadow-modal: 0 8px 40px rgba(0,0,0,0.08);
-  --shadow-block: 0 1px 3px var(--c-shadow-15);
-  --transition: 0.2s;
+/* ===== EFFECTS ===== */
+  --shadow-card:  0 4px 16px var(--c-shadow-10);
+  --shadow-modal: 0 12px 48px var(--c-shadow-15);
+  --shadow-block: 0 1px 4px var(--c-shadow-15);
+  --transition: 0.2s ease;
 }

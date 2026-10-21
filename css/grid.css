@@ -12,6 +12,19 @@
   overflow: auto;
 }
 
+.grid-col {
+  flex: 2 1 0;
+  min-width: 0;
+  position: relative;      /* ← anchor for the overlay */
+  display: flex;
+  flex-direction: column;
+}
+
+.main-split .grid-col .grid-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 table {
   border-collapse: collapse;
   width: max-content;   /* table = sum of all column widths → scrolls in grid-wrap */
@@ -26,24 +39,37 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   min-width: var(--grid-label-width); border-right: 1px solid var(--border);
 }
 
-/* Task cell — padding clears the spine; asymmetric for group spacing */
-.label-col.task-name {
-  padding: 8px 12px 2px 14px;   /* 14px left clears the 3px spine */
-  background: var(--panel);  
-  box-shadow: inset 3px 0 0 var(--task-color, var(--border));
+/* ===== Row tinting + spine (via .task-tr / .subtask-tr on <tr>) ===== */
+
+/* Task header rows */
+.task-tr .label-col {
+  padding: 8px 12px 2px 14px;   /* asymmetric: space above group, tight below */
+  background: color-mix(in srgb, var(--task-color) 10%, var(--panel));
+  box-shadow: inset 3px 0 0 var(--task-color);
+}
+.task-tr .cell {
+  background: color-mix(in srgb, var(--task-color) 7%, var(--panel));
 }
 
-/* Subtask cell — spine + content padding */
-.label-col.subtask-name {
+/* Subtask rows */
+.subtask-tr .label-col {
   padding: 0;
-  background: var(--panel);  
-  box-shadow: inset 3px 0 0 var(--task-color, var(--border));
+  background: color-mix(in srgb, var(--task-color) 7%, var(--panel));
+  box-shadow: inset 3px 0 0 var(--task-color);
+}
+.subtask-tr .cell {
+  background: color-mix(in srgb, var(--task-color) 5%, var(--panel));
+}
+
+/* Continuous horizontal lines across every row */
+.task-tr .label-col, .task-tr .cell,
+.subtask-tr .label-col, .subtask-tr .cell {
+  border-bottom: 1px solid var(--cell-border);
 }
 
 .task-name {
   font-weight: 700; font-size: var(--fs-body);
   display: flex; align-items: center; justify-content: space-between; gap: var(--gap-sm);
-  padding: 10px 0;   
 }
 .task-btns { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
 .task-name:hover .task-btns { opacity: 1; }   /* hide edit/delete until hover */
@@ -110,11 +136,6 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   background: var(--panel);     /* ← opaque, not transparent */
 }
 .subtask-name.due-today .st-name { font-weight: 600; color: var(--danger); }
-.due-today-badge {
-  font-size: 12px;
-  flex-shrink: 0;
-  line-height: 1;
-}
 
 /* Day header + cells — tighter */
 .day-head { padding: 3px 2px; min-width: var(--grid-cell-size); color: var(--muted); font-weight: 500; }
@@ -124,8 +145,11 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   width: var(--grid-cell-size); height: 22px;
   border: 1px solid var(--cell-border); position: relative;
 }
-.cell.weekend { background: var(--cell-weekend); }
+.cell.weekend {
+  background: color-mix(in srgb, var(--task-color) 5%, var(--weekend-bg));
+}
 .cell.today { box-shadow: inset 0 0 0 2px var(--today); }
+
 .cell .square { position: absolute; inset: 6px; border-radius: 4px; }
 .cell.due .square { background: transparent; display: flex; align-items: center; justify-content: center; }
 .cell.due .square::after { content: "✕"; color: var(--danger); font-weight: 700; font-size: 15px; }
@@ -160,4 +184,70 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   .day-head { min-width: var(--grid-cell-size-mobile); }
   .cell { width: var(--grid-cell-size-mobile); height: var(--grid-cell-size-mobile); }
   .st-name { max-width: 90px; }
+}
+/* ===== Toolbar ===== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tb-group {
+  display: flex;
+  gap: 6px;
+}
+
+.toolbar #addTaskBtn {
+  margin-left: 8px;
+}
+
+/* nav wrapper is the direct flex child → center IT */
+.toolbar .grid-nav-bar {
+  display: flex;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 0;          /* kill leftover standalone-bar margin */
+}
+
+/* match nav button height to Add Task so they're vertically level */
+.toolbar .grid-nav {
+  margin-bottom: 0;          /* override the general .grid-nav rule */
+}
+.toolbar .grid-nav button {
+  padding: 9px 14px;
+}
+
+.tb-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+
+/* "Show completed" overlays the grid's top-right corner,
+   positioned by % / edge offsets → moves with the grid on resize */
+.show-completed-mini {
+  position: absolute;
+  top: 10px;
+  left: 16px;             /* anchored to the LEFT edge of the grid → reflows on resize */
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px var(--c-shadow-10);
+}
+.show-completed-mini input {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+  margin: 0;
 }

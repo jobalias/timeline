@@ -20,7 +20,6 @@ class App {
     this.drive = new GoogleDrive(this.gcal);
     this.settings = new Settings();
     this.store.attachDrive(this.drive);
-    this.dayView = new DayView(this.store, this.gcal);
     this.plannerView = new PlannerView(this.store, this.gcal, this.settings);
     this.progressView = new ProgressView(this.store);
     this.noteModal = new NoteModal(this.store, {
@@ -376,28 +375,24 @@ class App {
   }
 
   async _reconcile() {
-    const gridBtn = document.getElementById('refreshBtn');
-    const plannerBtn = document.getElementById('plannerRefreshBtn');
-    const btn = this.activeView === 'planner' ? plannerBtn : gridBtn;
-    console.log("🔄 Reconciling with Google Calendar…");
-    this.plannerView.refresh();
-    if (btn) { btn.disabled = true; btn.textContent = '🔄 Syncing…'; }
+  const gridBtn = document.getElementById('refreshBtn');
+  const plannerBtn = document.getElementById('plannerRefreshBtn');
+  const btn = this.activeView === 'planner' ? plannerBtn : gridBtn;
+  this.plannerView.refresh();
+  if (btn) { btn.disabled = true; btn.classList.add('syncing'); }   // ← class, not text
 
-    try {
-      const changed = await this.store.reconcileWithCalendar(this.gcal);
-      // always refresh the day view (it shows live calendar state)
-      await this.dayView.render();
-      this.grid.render();
-      if (btn) btn.textContent = changed ? '🔄 Updated!' : '🔄 Up to date';
-    } catch (e) {
-      console.error('Reconcile failed:', e);
-      if (btn) btn.textContent = '🔄 Refresh';
-    } finally {
-      setTimeout(() => {
-        if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh'; }
-      }, 1500);
-    }
+  try {
+    const changed = await this.store.reconcileWithCalendar(this.gcal);
+    await this.dayView.render();
+    this.grid.render();
+  } catch (e) {
+    console.error('Reconcile failed:', e);
+  } finally {
+    setTimeout(() => {
+      if (btn) { btn.disabled = false; btn.classList.remove('syncing'); }  // ← class
+    }, 800);
   }
+}
 
   // ==================== Task deletion ====================
   async _confirmDelete(id) {

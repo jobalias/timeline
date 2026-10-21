@@ -49,3 +49,31 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.65; }
 }
+
+.view-tabs {
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.view-tab {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 18px;
+  color: var(--muted);
+  border-radius: 10px 10px 0 0;
+  transition: all 0.18s ease;
+}
+.view-tab:hover {
+  background: var(--c-gray-50);
+  color: var(--text);
+}
+.view-tab.active {
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--panel);
+  border-bottom-color: var(--accent);
+}
+.sync-badge {
+  font-weight: 500;
+  padding: 5px 12px;
+  box-shadow: 0 1px 2px var(--c-shadow-10);
+}

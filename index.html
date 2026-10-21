@@ -4,7 +4,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Task Grid</title>
+  <title>To Do List</title>
   <link rel="stylesheet" href="css/colors.css">  
   <link rel="stylesheet" href="css/theme.css">    
   <link rel="stylesheet" href="css/base.css">
@@ -15,6 +15,9 @@
   <link rel="stylesheet" href="css/progress.css">
   <link rel="stylesheet" href="css/modals.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
   <script src="js/lib/fullcalendar.min.js"></script>
@@ -25,7 +28,7 @@
   <div class="login-screen" id="loginScreen">
     <div class="login-card">
       <div class="login-icon">📋</div>
-      <h1>Task Grid</h1>
+      <h1>To Do List</h1>
       <p>Plan your tasks and sync them with Google Calendar &amp; Drive.</p>
       <button class="primary login-btn" id="loginBtn">Sign in with Google</button>
       <p class="login-note">Your data is stored privately in your Google Drive.</p>
@@ -34,7 +37,7 @@
 
   <!-- ============ Main App ============ -->
   <div id="appContainer" style="display:none;">
-    <h1>📋 Task Grid</h1>
+    <h1>To Do List</h1>
 
     <div class="view-tabs">
       <button class="view-tab active" id="tabGrid">📊 Grid</button>
@@ -45,30 +48,42 @@
     <!-- ===== GRID VIEW ===== -->
     <div id="gridViewContainer">
       <div class="toolbar">
-        <button class="primary" id="addTaskBtn">+ Add Task</button>
-        <button id="refreshBtn" title="Sync with Google Calendar">🔄 Refresh</button>
-        <button id="settingsBtn" title="Settings">⚙️</button>
-        <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
-          <input type="checkbox" id="showCompleted"> Show completed
-        </label>
-        <span class="sync-badge" id="syncBadge">● Not synced</span>
-        <div class="grid-nav">
-          <button id="gridPrev">← Prev week</button>
-          <button id="gridToday">Today</button>
-          <button id="gridNext">Next week →</button>
+        <!-- utility cluster, far left -->
+        <div class="tb-group">
+          <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
+          <button class="icon-btn" id="refreshBtn" title="Refresh — sync with Google Calendar">🔄</button>
         </div>
-        <span class="auth-status connected" id="authStatus" style="margin-left:auto;">
-          Signed in ✓
-        </span>
-        <button id="authBtn">Sign out</button>
+
+        <!-- Primary -->
+        <button class="primary" id="addTaskBtn">+ Add Task</button>
+        <div class="grid-nav-bar">
+          <div class="tb-segment grid-nav">
+            <button id="gridPrev">←</button>
+            <button id="gridToday">Today</button>
+            <button id="gridNext">→</button>
+          </div>
+        </div>
+        <!-- status + account pushed right -->
+        <div class="tb-right">
+          <span class="sync-badge" id="syncBadge">● Synced ✓</span>
+          <span class="auth-status connected" id="authStatus">Signed in ✓</span>
+          <button class="ghost-btn" id="authBtn">Sign out</button>
+        </div>
       </div>
+
+              
 
       <div class="sync-warning" id="syncWarning" style="display:none;">
         ⚠️ <span id="syncWarningText"></span>
       </div>
 
       <div class="main-split">
-        <div class="grid-wrap" id="gridWrap"></div>
+        <div class="grid-col">
+          <div class="grid-wrap" id="gridWrap"></div>
+          <label class="show-completed-mini" id="showCompletedLabel">
+            <input type="checkbox" id="showCompleted"> Show completed
+          </label>
+        </div>
 
         <div class="day-view" id="dayView">
           <div class="day-view-header">
@@ -86,7 +101,7 @@
     <div id="plannerViewContainer" style="display:none;">
       <div class="planner-toolbar">
         <button class="primary" id="plannerAddTaskBtn">+ Add Task</button>
-        <button id="plannerRefreshBtn">🔄 Refresh!</button>
+        <button id="plannerRefreshBtn">🔄 Refresh</button>
         <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
           <input type="checkbox" id="hideScheduled"> Hide fully scheduled
         </label>

@@ -203,7 +203,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
         ? '<span class="note-dot" title="Has a note"></span>'
         : '';
 
-      html += `<tr><td class="label-col ${taskCls}" data-task-id="${task.id}"
+      html += `<tr class="task-tr" style="--task-color:${task.color};"><td class="label-col ${taskCls}" data-task-id="${task.id}"
                  style="--task-color:${task.color};">
                  ${taskNoteBadge}
                  <span class="task-title">${escapeHtml(task.name)}</span>
@@ -264,7 +264,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       title="${waiting ? 'Ball in their court — click to restore' : 'Waiting on someone? Click to minimize'}">
       ${waiting ? '🏓' : '🏐'}</button>`;
 
-    let html = `<tr><td class="label-col ${rowCls}" style="--task-color:${task.color};">
+    let html = `<tr class="subtask-tr" style="--task-color:${task.color};"><td class="label-col ${rowCls}">
         ${noteBadge}
         <div class="st-row">
           ${waiting ? '' : `<input type="checkbox" class="done-check"

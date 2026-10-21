@@ -1,78 +1,96 @@
-/* ============================================================
-   COLORS — Raw palette. The actual color values.
-   Edit here to re-theme. Roles are assigned in theme.css.
-   ============================================================ */
 :root {
-  /* Neutrals */
+  /* Neutrals — clean bright paper, whisper of warmth */
   --c-white:      #ffffff;
-  --c-gray-50:    #fafafc;
-  --c-gray-100:   #f7f7f9;
-  --c-gray-150:   #f0f0f4;
-  --c-gray-200:   #ededf2;
-  --c-gray-250:   #eef0f3;
-  --c-gray-300:   #e2e2e8;
-  --c-gray-350:   #d1d1d6;
-  --c-gray-400:   #c7c7cc;
-  --c-gray-500:   #a0a0a8;
-  --c-gray-600:   #8e8e93;
-  --c-gray-700:   #6e6e73;
-  --c-gray-800:   #48484a;
-  --c-gray-850:   #3a3a3c;
-  --c-black:      #1c1c1e;
+  --c-gray-50:    #fbfbfa;
+  --c-gray-100:   #f7f6f3;   /* main bg — bright warm-white */
+  --c-gray-150:   #f1f0ec;
+  --c-gray-200:   #e9e8e3;
+  --c-gray-250:   #e3e2dc;
+  --c-gray-300:   #dcdad3;   /* borders */
+  --c-gray-350:   #c9c6bd;
+  --c-gray-400:   #aeaaa0;
+  --c-gray-500:   #87837a;
+  --c-gray-600:   #6a665e;   /* muted text */
+  --c-gray-700:   #4b4842;
+  --c-gray-800:   #363430;
+  --c-gray-850:   #2d2b28;
+  --c-black:      #26241f;   /* warm charcoal ink */
 
-  /* Blues */
-  --c-blue:       #0a84ff;
-  --c-blue-dark:  #0060df;
-  --c-blue-50:    #eef7ff;
-  --c-blue-100:   #d8e8ff;
-  --c-blue-150:   #eef4ff;
-  --c-blue-200:   #a9d2ff;
-  --c-blue-900:   #0a4a8f;
+  /* Primary accent — deep muted green (grounded, confident) */
+  --c-blue:       #3f7d5c;   /* yes it's named "blue" but it's our green accent */
+  --c-blue-dark:  #336449;
+  --c-blue-50:    #eef4f0;
+  --c-blue-100:   #dce9e1;
+  --c-blue-150:   #e8f0ea;
+  --c-blue-200:   #b4d2c0;
+  --c-blue-900:   #284d39;
 
-  /* Greens */
-  --c-green:      #34c759;
-  --c-green-dark: #2fb350;
-  --c-green-50:   #f0fff4;
-  --c-green-100:  #d6f5df;
-  --c-green-150:  #c6f6d5;
-  --c-green-700:  #1a7f37;
+  /* Green (status: done/synced) — same family, slightly brighter */
+  --c-green:      #4a8c63;
+  --c-green-dark: #3c7452;
+  --c-green-50:   #eff5f1;
+  --c-green-100:  #dbeae0;
+  --c-green-150:  #c8ddd0;
+  --c-green-700:  #2f5c41;
 
-  /* Reds */
-  --c-red:        #ff3b30;
-  --c-red-dark:   #cf222e;
-  --c-red-50:     #ffe5e5;
-  --c-red-100:    #ffd6d6;
-  --c-red-200:    #ffb3b3;
+  /* Red — soft clay (warnings, due ✕) */
+  --c-red:        #c05f4a;
+  --c-red-dark:   #a54c39;
+  --c-red-50:     #f8ebe6;
+  --c-red-100:    #f1ddd5;
+  --c-red-200:    #e0b8ab;
 
-  /* Yellows / Golds / Oranges / Browns */
-  --c-yellow:     #ffcc00;
-  --c-amber-50:   #fff4d6;
-  --c-amber-100:  #fff2d6;
-  --c-gold-100:   #ffe9a8;
-  --c-gold-200:   #ffd966;
-  --c-gold-300:   #f0b429;
-  --c-gold-400:   #f5c563;
-  --c-orange:     #ffb340;
-  --c-orange-600: #ffa726;
-  --c-orange-700: #f59e0b;
-  --c-brown-600:  #b7791f;
-  --c-brown-700:  #9a6700;
-  --c-brown-800:  #8a6d1f;
-  --c-brown-900:  #7a5c00;
-  --c-brown-950:  #5c4500;
+  /* Gold / amber (highlights, today) */
+  --c-yellow:     #e0b64a;
+  --c-amber-50:   #f8f1df;
+  --c-amber-100:  #f3e8cd;
+  --c-gold-100:   #ecdcac;
+  --c-gold-200:   #ddc47e;
+  --c-gold-300:   #c9a84e;
+  --c-gold-400:   #d4b968;
+  --c-orange:     #d49a5a;
+  --c-orange-600: #c48a48;
+  --c-orange-700: #aa743a;
+  --c-brown-600:  #8a6a38;
+  --c-brown-700:  #735628;
+  --c-brown-800:  #5f4720;
+  --c-brown-900:  #4d3a1b;
+  --c-brown-950:  #3a2c14;
 
-  /* Translucent overlays */
-  --c-shadow-10:   rgba(0,0,0,0.10);
-  --c-shadow-15:   rgba(0,0,0,0.15);
-  --c-shadow-30:   rgba(0,0,0,0.30);
-  --c-shadow-35:   rgba(0,0,0,0.35);
-  --c-shadow-40:   rgba(0,0,0,0.40);
-  --c-shadow-50:   rgba(0,0,0,0.50);
-  --c-overlay-06:  rgba(0,0,0,0.06);
-  --c-red-tint:    rgba(255,59,48,0.08);
-  --c-red-tint-15: rgba(255,59,48,0.15);
-  --c-red-tint-20: rgba(255,59,48,0.20);
-  --c-blue-tint:   rgba(10,132,255,0.04);
-  --c-blue-tint-15:rgba(10,132,255,0.15);
-  --c-gold-tint:   rgba(240,180,41,0.35);
+  /* Overlays — neutral, barely warm */
+  --c-shadow-10:   rgba(50,45,35,0.07);
+  --c-shadow-15:   rgba(50,45,35,0.11);
+  --c-shadow-30:   rgba(45,40,30,0.26);
+  --c-shadow-35:   rgba(45,40,30,0.32);
+  --c-shadow-40:   rgba(45,40,30,0.38);
+  --c-shadow-50:   rgba(40,35,25,0.48);
+  --c-overlay-06:  rgba(50,45,35,0.05);
+  --c-red-tint:    rgba(192,95,74,0.07);
+  --c-red-tint-15: rgba(192,95,74,0.14);
+  --c-red-tint-20: rgba(192,95,74,0.20);
+  --c-blue-tint:   rgba(63,125,92,0.05);
+  --c-blue-tint-15:rgba(63,125,92,0.15);
+  --c-gold-tint:   rgba(212,169,74,0.28);
+
+  /* ===== TASK PALETTE — brighter, cheerful tags ===== */
+  --task-01: #ef5a3a;  /* bright rust red */
+  --task-02: #5fae4e;  /* leaf green */
+  --task-03: #f58a2e;  /* bright pumpkin */
+  --task-04: #2fab9a;  /* teal */
+  --task-05: #e04a2f;  /* vivid brick */
+  --task-06: #f5b428;  /* golden amber */
+  --task-07: #ff8c3a;  /* tangerine orange */
+  --task-08: #3f9e86;  /* deep jade */
+  --task-09: #d84b3c;  /* coral brick */
+  --task-10: #eaa520;  /* harvest gold */
+  --task-11: #7cb342;  /* olive leaf */
+  --task-12: #f27a3a;  /* clay orange */
+  --task-13: #c77a3a;  /* warm copper */
+  --task-14: #a3b53a;  /* chartreuse */
+  --task-15: #e86a2d;  /* burnt orange */
+  --task-16: #4a90b8;  /* harvest blue */
+  --task-17: #f0b81e;  /* marigold gold */
+  --task-18: #c05e38;  /* cinnamon */
+  --task-19: #8faa38;  /* mossy lime */
+  --task-20: #dd4f38;  /* deep red-orange */
 }

@@ -238,7 +238,7 @@ toggleAuth() {
   }
 
   async createEvent({ summary, description, startDate, startTime, hours }) {
-    if (!this.syncEnabled) return eventId || null;
+    if (!this.syncEnabled) return null;
     const [h, m] = startTime.split(':').map(Number);
     const startDt = new Date(startDate + 'T00:00:00');
     startDt.setHours(h, m, 0, 0);

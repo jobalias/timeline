@@ -303,7 +303,7 @@ _scheduleRetry() {
 
     const sorted = [...this.tasks].sort(
       (a, b) => (isTaskDone(a) ? 1 : 0) - (isTaskDone(b) ? 1 : 0)
-    );``
+    );
     return sorted.sort((a, b) => {
       const aDue = soonestDueDate(a);
       const bDue = soonestDueDate(b);
