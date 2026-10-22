@@ -11,6 +11,8 @@ import { Settings } from './services/Settings.js';
 import { CalendarPicker } from './views/CalendarPicker.js';
 import { PlannerView } from './views/PlannerView.js';
 import { ProgressView } from './views/ProgressView.js';
+import { escapeHtml } from './utils.js'; 
+import { Task } from './models/Task.js'; 
 
 class App {
   constructor() {
@@ -175,11 +177,33 @@ class App {
     const expandBtn = document.getElementById('calExpandBtn');
     const chevron = document.getElementById('calChevron');
     const expandBody = document.getElementById('calExpandBody');
+    const alwaysExpandBtn = document.getElementById('alwaysExpandBtn');
+    const alwaysChevron = document.getElementById('alwaysChevron');
+    const alwaysBody = document.getElementById('alwaysExpandBody');
+    const alwaysAddBtn = document.getElementById('alwaysAddBtn');
+    const alwaysAddInput = document.getElementById('alwaysAddInput');
+
+    alwaysExpandBtn.addEventListener('click', () => {
+      const isOpen = alwaysBody.style.display !== 'none';
+      alwaysBody.style.display = isOpen ? 'none' : 'block';
+      alwaysChevron.classList.toggle('open', !isOpen);
+      if (!isOpen) this._renderAlwaysList();
+    });
+
+    const addAlways = () => {
+      const name = alwaysAddInput.value.trim();
+      if (!name) return;
+      this._addAlwaysTask(name);
+      alwaysAddInput.value = '';
+    };
+    alwaysAddBtn.addEventListener('click', addAlways);
+    alwaysAddInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addAlways(); });
 
     // open settings
     document.getElementById('settingsBtn').addEventListener('click', () => {
       toggle.checked = this.store.getCalendarSyncEnabled();
       this.calendarPicker.populateList();
+      this._renderAlwaysList();
       backdrop.classList.add('open');
     });
 
@@ -325,23 +349,55 @@ class App {
   }
 
   // ==================== Task deletion ====================
-  async _handleDeleteTask(id) {
+// ==================== Task deletion ====================
+async _handleDeleteTask(id) {
   const task = this.store.find(id);
   if (!task) return;
 
-  const hasEvents = task.subtasks.some((s) =>
-    s.blocks.some((b) => b.eventId)
-  );
+  // --- Persistent task WITH subtasks → delete-all vs. demote ---
+  if (task.persistent && task.subtasks.length > 0) {
+    const choice = await this.deleteDialog.open({
+      title: `Delete "${task.name}"?`,
+      message: 'This is an Always Task with subtasks. Delete everything, or just make it a normal task?',
+      labels: {
+        all: '🗑 Delete task and all subtasks',
+        none: '📌 Keep it — just make it non-persistent',
+        cancel: 'Cancel',
+      },
+      hide: ['future'],
+    });
 
-  // no events or not connected → simple confirm
+    if (choice === 'cancel') return;
+
+    if (choice === 'none') {
+      // demote: keep task + subtasks, no calendar changes
+      task.persistent = false;
+      this.store._save();            // persists + notifies (re-renders grid)
+      this._renderAlwaysList();      // refresh settings list if open
+      return;
+    }
+    // choice === 'all' → fall through to normal deletion below
+    // (if it has calendar events, a 2nd dialog asks about them — you're OK with that)
+  }
+
+  // --- Persistent task with NO subtasks → just delete (per Q1) ---
+  if (task.persistent && task.subtasks.length === 0) {
+    await this.store.removeTask(id, 'none', this.gcal);
+    this._renderAlwaysList();
+    return;
+  }
+
+  // --- Normal deletion (handles calendar events) ---
+  const hasEvents = task.subtasks.some((s) => s.blocks.some((b) => b.eventId));
+
   if (!hasEvents || !this.gcal.isAuthed) {
     if (confirm(`Delete "${task.name}" and all its subtasks?`)) {
       await this.store.removeTask(id, 'none', this.gcal);
     }
+    this._renderAlwaysList();
     return;
   }
 
-  // has events → three-option dialog
   const choice = await this.deleteDialog.open({
     title: `Delete "${task.name}"?`,
     message: 'This task has calendar events. What should happen to them?',
@@ -349,6 +405,7 @@ class App {
   if (choice === 'cancel') return;
 
   await this.store.removeTask(id, choice, this.gcal);
+  this._renderAlwaysList();
 }
 
   _showApp() {
@@ -600,6 +657,36 @@ class App {
       }
     }
   }
+
+  // ==================== Always Tasks (settings) ====================
+_renderAlwaysList() {
+  const list = document.getElementById('alwaysTaskList');
+  if (!list) return;
+  const always = this.store.getAll().filter((t) => t.persistent);
+
+  if (always.length === 0) {
+    list.innerHTML = '<div class="always-empty">No always-tasks yet.</div>';
+    return;
+  }
+
+  list.innerHTML = always.map((t) => `
+    <div class="always-row" data-task-id="${t.id}">
+      <span>${escapeHtml(t.name)}</span>
+      <button class="always-del" data-task-id="${t.id}" title="Remove">➖</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.always-del').forEach((btn) => {
+    btn.addEventListener('click', () => this._handleDeleteTask(btn.dataset.taskId));
+  });
+}
+
+_addAlwaysTask(name) {
+  const task = new Task({ name, persistent: true });
+  this.store.add(task);          // pushes + saves + notifies
+  // give it a color consistent with the others
+  this._renderAlwaysList();
+}
 }
 
 // Boot up

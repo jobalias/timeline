@@ -34,10 +34,11 @@ export function nextColor(used_colors = null) {
 }
 
 export class Task {
-  constructor({ id, name = '', subtasks = [], color = null, note = '' } = {}) {
+  constructor({ id, name = '', subtasks = [], color = null, note = '', persistent = false } = {}) {
     this.id = id || Date.now().toString();
     this.name = name;
-    this.note = note;                     // ← add
+    this.note = note;         
+    this.persistent = persistent;
     this.subtasks = subtasks.map((s) => new Subtask(s));
     this.color = color || nextColor();
   }
@@ -46,7 +47,8 @@ export class Task {
     return {
       id: this.id,
       name: this.name,
-      note: this.note,                    // ← add
+      note: this.note,     
+      persistent: this.persistent,  
       color: this.color,
       subtasks: this.subtasks.map((s) => s.toJSON()),
     };

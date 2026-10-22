@@ -60,3 +60,17 @@
 #delFuture:hover { background: var(--future-hover-bg); border-color: var(--future-hover-border); }
 #delAll:hover    { background: var(--del-hover-bg); border-color: var(--del-hover-border); }
 #delNone:hover   { background: var(--none-hover-bg); border-color: var(--none-hover-border); }
+
+.always-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 6px 10px;
+  background: var(--c-gray-50); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 14px;
+}
+.always-row .always-del {
+  border: none; background: transparent; color: var(--danger);
+  font-size: 16px; line-height: 1; padding: 2px 8px; cursor: pointer;
+  box-shadow: none;
+}
+.always-row .always-del:hover { background: var(--del-hover-bg); border-radius: 6px; }
+.always-empty { color: var(--muted); font-size: 13px; padding: 4px 2px; }

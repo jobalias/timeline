@@ -129,7 +129,8 @@ export class CalendarView {
             title: `${task.name}: ${st.name}`,
             start,
             end,
-            _appBlock: true, // mark so we could style differently
+            _appBlock: true, 
+            _color: task.color,
           });
         });
       });
@@ -194,6 +195,9 @@ export class CalendarView {
       el.style.top = this._minutesFromMidnight(ev.start) * PX_PER_MIN + 'px';
       el.style.height = Math.max(16, (ev.end - ev.start) / 60000 * PX_PER_MIN) + 'px';
       el.textContent = ev.title;
+      if (ev._appBlock && ev._color) {
+        el.style.setProperty('--block-color', ev._color);
+      }
       cols[dayIdx].appendChild(el);
     });
   }

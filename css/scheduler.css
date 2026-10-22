@@ -41,9 +41,17 @@
   text-align: center; padding: 8px 4px; font-size: 13px; font-weight: 600;
   border-bottom: 1px solid var(--border); border-left: 1px solid var(--border);
 }
-.cal-day-head .dow { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
-.cal-day-head.today { color: var(--accent); }
+.cal-day-head .dow { display: block; font-size: 11px; color: var(--c-black); font-weight: 500; }
+.cal-day-head.today { 
+  color: var(--c-black); 
+  background: var(--today);
+  border-radius: 6px 6px 0 0;
+  font-weight: 700;
+}
 
+.cal-daycol.today {
+  background: color-mix(in srgb, var(--today) 80%, transparent);
+}
 .cal-time-label {
   font-size: 11px; color: var(--muted); text-align: right;
   padding: 0 6px; height: calc(var(--sched-hour-px) * 1px); position: relative; top: -6px;
@@ -59,14 +67,14 @@
   overflow: hidden; pointer-events: none; border-left: 3px solid var(--busy-border);
 }
 .cal-event-app {
-  background: var(--app-block-bg) !important;
-  border-left-color: var(--accent) !important;
-  color: var(--app-block-text) !important;
+  background: color-mix(in srgb, var(--block-color, var(--accent)) 22%, var(--panel)) !important;
+  border-left-color: var(--block-color, var(--accent)) !important;
+  color: var(--c-black) !important;
 }
 
 .cal-block {
   position: absolute; left: 2px; right: 2px;
-  background: var(--accent); color: var(--c-white);
+  background: var(--block-color, var(--accent)); color: var(--c-white);
   border-radius: 6px; padding: 2px 6px; font-size: 11px;
   overflow: hidden; cursor: move; border-left: 3px solid var(--accent-dark);
 }

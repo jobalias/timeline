@@ -196,8 +196,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     // ----- Task + subtask rows -----
     tasks.forEach((task) => {
       const allDone = task.subtasks.length > 0 && task.subtasks.every((s) => s.done);
-      if (allDone && !this.showCompleted) return;
-
+      if (!task.persistent && allDone && !this.showCompleted) return;
       const taskCls = allDone ? 'task-name task-done' : 'task-name';
       const taskNoteBadge = (task.note && task.note.trim())
         ? '<span class="note-dot" title="Has a note"></span>'
