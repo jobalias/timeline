@@ -2,12 +2,22 @@
 .planner-toolbar { display: flex; align-items: center; gap: var(--gap-md); margin-bottom: var(--gap-md); }
 .planner-hint { font-size: 13px; color: var(--muted); }
 
-.planner-layout { display: flex; flex-direction: column; gap: var(--gap-md); height: var(--planner-height); }
+.planner-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+  height: var(--planner-height);
+}
 
 #plannerCalendar {
-  flex: 3; min-height: 0; height: 100%;
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: var(--gap-md); overflow: hidden;
+  flex: 1 1 auto;        /* calendar takes remaining space */
+  min-height: 0;
+  /* remove height: 100% — flex handles it */
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--gap-md);
+  overflow: hidden;
 }
 
 .fc { font-family: var(--font-main); font-size: 13px; }
@@ -56,10 +66,18 @@
 }
 
 .backlog-strip {
-  flex: 1; min-height: 140px;
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); display: flex; flex-direction: column; overflow: hidden;
+  flex: 0 0 auto;        /* ← size to content, don't stretch/shrink */
+  /* remove min-height: 140px — let content decide, or keep as a floor */
+  max-height: 40%;   
+  min-height: 140px;     /* optional floor for when empty */
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;      /* keep; the inner cards row handles its own scroll */
 }
+
 .backlog-header {
   padding: 10px 14px; font-size: 13px; font-weight: 700; color: var(--muted);
   text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid var(--border);

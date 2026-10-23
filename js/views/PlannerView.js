@@ -108,8 +108,14 @@ export class PlannerView {
         center: 'title',
         right: 'timeGridDay,timeGridWeek,dayGridMonth',
       },
+      buttonText: {                  
+        today: 'Today',
+        day: 'Day',
+        week: 'Week',
+        month: 'Month',
+      },
       views: {
-        timeGridWeek: { duration: { days: 7 }, dateIncrement: { days: 1 } },
+        timeGridWeek: { duration: { days: 7 }, dateIncrement: { days: 1 }, buttonText: 'Week'},
       },
       nowIndicator: true,
       slotDuration: '00:30:00',      // 30-min grid lines (or '00:15:00' for finer)
