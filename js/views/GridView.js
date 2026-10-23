@@ -205,7 +205,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       html += `<tr class="task-tr" style="--task-color:${task.color};"><td class="label-col ${taskCls}" data-task-id="${task.id}"
                  style="--task-color:${task.color};">
                  ${taskNoteBadge}
-                 <span class="task-title">${escapeHtml(task.name)}</span>
+                 <span class="task-title" title="${escapeHtml(task.name)}">${escapeHtml(task.name)}</span>
                  <span class="task-btns">
                    <button class="task-edit" data-task-id="${task.id}" title="Edit">✎</button>
                    <button class="task-del" data-task-id="${task.id}" title="Delete">🗑</button>
@@ -269,7 +269,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
           ${waiting ? '' : `<input type="checkbox" class="done-check"
             data-task-id="${task.id}" data-sub-index="${si}"
             ${st.done ? 'checked' : ''}>`}
-          <span class="st-name">${escapeHtml(st.name)}</span>
+          <span class="st-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
           ${waiting ? '' : dueBadge}
           ${waiting ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
             data-sub-index="${si}" ${clockDisabled}>⏰</button>`}

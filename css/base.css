@@ -228,3 +228,8 @@ input[type=time]:focus, input[type=number]:focus {
   color: var(--text);
   transform: none;
 }
+
+input.input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px var(--c-red-tint-15) !important;
+}

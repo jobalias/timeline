@@ -194,7 +194,6 @@ class App {
       const name = alwaysAddInput.value.trim();
       if (!name) return;
       this._addAlwaysTask(name);
-      alwaysAddInput.value = '';
     };
     alwaysAddBtn.addEventListener('click', addAlways);
     alwaysAddInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addAlways(); });
@@ -659,34 +658,85 @@ async _handleDeleteTask(id) {
   }
 
   // ==================== Always Tasks (settings) ====================
-_renderAlwaysList() {
-  const list = document.getElementById('alwaysTaskList');
-  if (!list) return;
-  const always = this.store.getAll().filter((t) => t.persistent);
+  _renderAlwaysList() {
+    const list = document.getElementById('alwaysTaskList');
+    if (!list) return;
+    const always = this.store.getAll().filter((t) => t.persistent);
 
-  if (always.length === 0) {
-    list.innerHTML = '<div class="always-empty">No always-tasks yet.</div>';
-    return;
+    if (always.length === 0) {
+      list.innerHTML = '<div class="always-empty">No always-tasks yet.</div>';
+      return;
+    }
+
+    list.innerHTML = always.map((t) => `
+      <div class="always-row" data-task-id="${t.id}">
+        <span>${escapeHtml(t.name)}</span>
+        <button class="always-del" data-task-id="${t.id}" title="Remove">➖</button>
+      </div>
+    `).join('');
+
+    list.querySelectorAll('.always-del').forEach((btn) => {
+      btn.addEventListener('click', () => this._handleDeleteTask(btn.dataset.taskId));
+    });
   }
 
-  list.innerHTML = always.map((t) => `
-    <div class="always-row" data-task-id="${t.id}">
-      <span>${escapeHtml(t.name)}</span>
-      <button class="always-del" data-task-id="${t.id}" title="Remove">➖</button>
-    </div>
-  `).join('');
+  // case-insensitive, trimmed name match
+  _findTaskByName(name) {
+    const norm = name.trim().toLowerCase();
+    return this.store.getAll().find((t) => t.name.trim().toLowerCase() === norm);
+  }
+  _addAlwaysTask(name) {
+    const input = document.getElementById('alwaysAddInput');
+    const match = this._findTaskByName(name);
 
-  list.querySelectorAll('.always-del').forEach((btn) => {
-    btn.addEventListener('click', () => this._handleDeleteTask(btn.dataset.taskId));
-  });
-}
+    if (match) {
+      if (match.persistent) {
+        this._flashAlwaysError('Already an always task.');   // red + blocked
+        return;
+      }
+      // normal task (completed or ongoing) → confirm convert
+      const ok = confirm(
+        `"${match.name}" already exists. Make it an always task?\n\n` +
+        `(It keeps its current subtasks — click Cancel to use a different name.)`
+      );
+      if (!ok) { input.focus(); return; }
 
-_addAlwaysTask(name) {
-  const task = new Task({ name, persistent: true });
-  this.store.add(task);          // pushes + saves + notifies
-  // give it a color consistent with the others
-  this._renderAlwaysList();
-}
+      match.persistent = true;
+      this.store._save();            // persist + re-render grid
+      input.value = '';
+      this._clearAlwaysError();
+      this._renderAlwaysList();
+      return;
+    }
+
+    // no match → create new persistent task
+    const task = new Task({ name: name.trim(), persistent: true });
+    this.store.add(task);
+    input.value = '';
+    this._clearAlwaysError();
+    this._renderAlwaysList();
+  }
+
+  _flashAlwaysError(msg) {
+    const input = document.getElementById('alwaysAddInput');
+    input.classList.add('input-error');
+    let note = document.getElementById('alwaysAddNote');
+    if (!note) {
+      note = document.createElement('div');
+      note.id = 'alwaysAddNote';
+      note.style.cssText = 'color:var(--danger);font-size:12px;margin-top:4px;';
+      input.closest('.settings-expand-body').appendChild(note);
+    }
+    note.textContent = msg;
+    const clear = () => this._clearAlwaysError();
+    input.addEventListener('input', clear, { once: true });
+  }
+  _clearAlwaysError() {
+    const input = document.getElementById('alwaysAddInput');
+    input.classList.remove('input-error');
+    const note = document.getElementById('alwaysAddNote');
+    if (note) note.textContent = '';
+  }
 }
 
 // Boot up

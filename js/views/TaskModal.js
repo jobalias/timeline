@@ -23,6 +23,10 @@ export class TaskModal {
       .addEventListener('click', () => this.close());
     document.getElementById('taskSaveBtn')
       .addEventListener('click', () => this._save());
+    this.nameInput.addEventListener('input', () => {
+      if (this.editingId) return;
+      this._validateName();
+    });
   }
 
   openNew() {
@@ -33,6 +37,10 @@ export class TaskModal {
     this.subtaskList.innerHTML = '';
     this._addSubtaskRow();
     this.backdrop.classList.add('open');
+
+    this.nameInput.classList.remove('input-error');
+    document.getElementById('taskSaveBtn').disabled = false;
+    this._clearNameNote();
   }
 
   openEdit(id) {
@@ -46,6 +54,10 @@ export class TaskModal {
     t.subtasks.forEach((st) => this._addSubtaskRow(st));
     if (t.subtasks.length === 0) this._addSubtaskRow();
     this.backdrop.classList.add('open');
+
+    this.nameInput.classList.remove('input-error');
+    document.getElementById('taskSaveBtn').disabled = false;
+    this._clearNameNote();
   }
 
   close() {
@@ -153,10 +165,35 @@ export class TaskModal {
         if (!existingIds.has(s.id)) newSubtaskIndices.push(i);
       });
     } else {
-      const task = new Task({ name, subtasks });
-      this.store.add(task);
-      savedId = task.id;
-      newSubtaskIndices = task.subtasks.map((_, i) => i);
+      // not editing — check for a name match
+      const { state, match } = this._classifyName(name);
+
+      if (state === 'blocked') {
+        // shouldn't happen (save is disabled), but guard anyway
+        this._validateName();
+        return;
+      }
+
+      if (state === 'mergeable' && match) {
+        // append NEW subtasks directly to the existing task — don't touch old ones
+        const startIndex = match.subtasks.length;
+
+        // `subtasks` here are the new Subtask instances from the modal (done=false, correct)
+        match.subtasks.push(...subtasks);
+
+        // persist + notify
+        this.store._save();
+
+        savedId = match.id;
+        // new subtasks occupy indices [startIndex ... end]
+        newSubtaskIndices = subtasks.map((_, i) => startIndex + i);
+      } else {
+        // truly new task
+        const task = new Task({ name, subtasks });
+        this.store.add(task);
+        savedId = task.id;
+        newSubtaskIndices = task.subtasks.map((_, i) => i);
+      }
     }
 
     // execute any pending calendar-event deletions from removed subtasks
@@ -189,5 +226,70 @@ export class TaskModal {
       }
     }
     this._pendingEventDeletions = [];
+  }
+  _findMatch(name) {
+    const norm = name.trim().toLowerCase();
+    return this.store.getAll().find(
+      (t) => t.name.trim().toLowerCase() === norm && t.id !== this.editingId
+    );
+  }
+
+  _isTaskDone(t) {
+    return t.subtasks.length > 0 && t.subtasks.every((s) => s.done);
+  }
+
+  // { state: 'ok' | 'blocked' | 'mergeable', match }
+  _classifyName(name) {
+    const match = this._findMatch(name);
+    if (!match) return { state: 'ok', match: null };
+    // Option A: completed OR empty → mergeable; ongoing → blocked
+    const mergeable = this._isTaskDone(match) || match.subtasks.length === 0;
+    return { state: mergeable ? 'mergeable' : 'blocked', match };
+  }
+
+  _validateName() {
+    const name = this.nameInput.value.trim();
+    const saveBtn = document.getElementById('taskSaveBtn');
+
+    if (!name) {
+      this.nameInput.classList.remove('input-error');
+      saveBtn.disabled = false;
+      this._clearNameNote();
+      return 'ok';
+    }
+
+    const { state } = this._classifyName(name);
+
+    if (state === 'blocked') {
+      this.nameInput.classList.add('input-error');
+      saveBtn.disabled = true;
+      this._showNameNote('A task with this name already exists.');
+    } else if (state === 'mergeable') {
+      this.nameInput.classList.remove('input-error');
+      saveBtn.disabled = false;
+      this._showNameNote('Matches an existing task — your subtasks will be added to it.', true);
+    } else {
+      this.nameInput.classList.remove('input-error');
+      saveBtn.disabled = false;
+      this._clearNameNote();
+    }
+    return state;
+  }
+
+  _showNameNote(msg, info = false) {
+    let note = document.getElementById('taskNameNote');
+    if (!note) {
+      note = document.createElement('div');
+      note.id = 'taskNameNote';
+      note.style.cssText = 'font-size:12px;margin-top:4px;';
+      this.nameInput.insertAdjacentElement('afterend', note);
+    }
+    note.style.color = info ? 'var(--muted)' : 'var(--danger)';
+    note.textContent = msg;
+  }
+
+  _clearNameNote() {
+    const note = document.getElementById('taskNameNote');
+    if (note) note.textContent = '';
   }
 }
