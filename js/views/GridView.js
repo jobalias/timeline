@@ -45,6 +45,78 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       }
     });
 
+    // ===== MOBILE swipe gestures on subtask rows =====
+    // swipe right → toggle complete;  swipe left → toggle waiting;  tap → (handled elsewhere, note)
+    this._swipe = null;
+    const SWIPE_THRESHOLD = 60;   // px of horizontal travel to trigger
+    const SWIPE_MAX_OFF_AXIS = 30; // max vertical drift to still count as horizontal
+
+    this.wrap.addEventListener('touchstart', (e) => {
+      if (!this.isMobile) return;
+      const row = e.target.closest('.m-subtask');
+      if (!row) { this._swipe = null; return; }
+      // don't start a swipe if the touch began on the clock button
+      if (e.target.closest('.sched-btn')) { this._swipe = null; return; }
+
+      const t = e.touches[0];
+      this._swipe = {
+        row,
+        startX: t.clientX,
+        startY: t.clientY,
+        taskId: row.dataset.taskId,
+        subIndex: parseInt(row.dataset.subIndex, 10),
+        done: row.dataset.done === '1',
+        fired: false,
+      };
+    }, { passive: true });
+
+    this.wrap.addEventListener('touchmove', (e) => {
+      if (!this._swipe || this._swipe.fired) return;
+      const t = e.touches[0];
+      const dx = t.clientX - this._swipe.startX;
+      const dy = t.clientY - this._swipe.startY;
+
+      // vertical-dominant → it's a scroll, abandon the swipe
+      if (Math.abs(dy) > SWIPE_MAX_OFF_AXIS && Math.abs(dy) > Math.abs(dx)) {
+        this._swipe.row.style.transform = '';
+        this._swipe = null;
+        return;
+      }
+
+      // horizontal-dominant → follow the finger a bit (visual feedback)
+      if (Math.abs(dx) > Math.abs(dy)) {
+        this._swipe.row.style.transform = `translateX(${Math.max(-80, Math.min(80, dx))}px)`;
+      }
+    }, { passive: true });
+
+    this.wrap.addEventListener('touchend', (e) => {
+      const s = this._swipe;
+      this._swipe = null;
+      if (!s) return;
+
+      // snap the row back
+      s.row.style.transition = 'transform 0.15s ease';
+      s.row.style.transform = '';
+      setTimeout(() => { s.row.style.transition = ''; }, 160);
+
+      const t = (e.changedTouches && e.changedTouches[0]) || null;
+      if (!t) return;
+      const dx = t.clientX - s.startX;
+      const dy = t.clientY - s.startY;
+
+      // must be a clear horizontal swipe past threshold
+      if (Math.abs(dx) < SWIPE_THRESHOLD) return;      // too small → treat as tap (note opens via click)
+      if (Math.abs(dy) > Math.abs(dx)) return;         // too vertical → ignore
+
+      if (dx > 0) {
+        // swipe RIGHT → toggle complete (same workflow as checkbox, incl. hours prompt)
+        this.onToggleDone(s.taskId, s.subIndex, !s.done);
+      } else {
+        // swipe LEFT → toggle waiting
+        this.onToggleWaiting(s.taskId, s.subIndex);
+      }
+    }, { passive: true });
+
     // double-click anywhere on a task/subtask row → open note popup
     this.wrap.addEventListener('dblclick', (e) => {
       // ignore double-clicks on interactive controls
@@ -60,14 +132,28 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       if (!labelCol) return;
 
       // subtask row? (has a checkbox with the IDs)
-      const check = labelCol.querySelector('.done-check');
-      if (check) {
-        this.onOpenSubtaskNote(
-          check.dataset.taskId,
-          parseInt(check.dataset.subIndex, 10)
-        );
-        return;
-      }
+      this.wrap.addEventListener('click', (e) => {
+        if (!this.isMobile) return;
+
+        if (e.target.closest('.sched-btn') ||
+            e.target.closest('.task-edit') ||
+            e.target.closest('.task-del')) {
+          return;
+        }
+
+        // subtask row? (.m-sub-label carries the ids now)
+        const subLabel = e.target.closest('.m-sub-label');
+        if (subLabel && subLabel.dataset.subIndex !== undefined) {
+          this.onOpenSubtaskNote(subLabel.dataset.taskId, parseInt(subLabel.dataset.subIndex, 10));
+          return;
+        }
+
+        // task header?
+        const labelCol = e.target.closest('.label-col');
+        if (labelCol && labelCol.dataset.taskId && !labelCol.classList.contains('m-sub-label')) {
+          this.onOpenTaskNote(labelCol.dataset.taskId);
+        }
+      });
 
       // task row? (.label-col with data-task-id but no checkbox)
       const taskId = labelCol.dataset.taskId;
@@ -480,27 +566,23 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       : (st.remainingHours > 0 ? 'sched-btn clock-pending' : 'sched-btn clock-full');
     const clockDisabled = st.done ? 'disabled' : '';
 
-    const ballBtn = waiting
-      ? `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
-          title="Waiting — tap to clear">🏓</button>`
-      : '';
-    // due-date chip, colored by urgency
     const dueChip = this._mobileDueChip(st, today);
 
-    // label-col wrapper carries the checkbox data so dblclick→subtask-note works
+    // paddle shown only when waiting (visual marker)
+    const waitMark = waiting ? '<span class="m-wait-mark" title="Waiting">🏓</span>' : '';
+
     return `
-      <div class="${rowCls}">
-        <div class="label-col m-sub-label">
+      <div class="${rowCls}" data-task-id="${task.id}" data-sub-index="${si}"
+          data-done="${st.done ? '1' : '0'}">
+        <div class="label-col m-sub-label" data-task-id="${task.id}" data-sub-index="${si}">
           ${noteBadge}
-          ${waiting ? '' : `<input type="checkbox" class="done-check"
-            data-task-id="${task.id}" data-sub-index="${si}" ${st.done ? 'checked' : ''}>`}
+          ${waitMark}
           <span class="m-sub-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
         </div>
         <div class="m-sub-right">
           ${dueChip}
-          ${waiting ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
+          ${st.done ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
             data-sub-index="${si}" ${clockDisabled}>⏰</button>`}
-          ${ballBtn}
         </div>
       </div>`;
   }

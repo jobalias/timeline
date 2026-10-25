@@ -48,10 +48,13 @@
   /* subtask rows */
   .m-subtask {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 6px; padding: 10px 1px;
+    gap: 6px;
+    padding: 8px 12px 8px 7px;
     border-top: 1px solid var(--cell-border);
     border-left: 4px solid var(--task-color);
     background: color-mix(in srgb, var(--task-color) 4%, var(--panel));
+    touch-action: pan-y;            /* let vertical scroll happen natively */
+    will-change: transform;
   }
   .m-sub-label {
     display: flex; align-items: center; gap: 7 px;
@@ -63,14 +66,14 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     font-size: 15px;
   }
-  .m-subtask.subtask-done .m-sub-name { text-decoration: line-through; color: var(--muted); }
 
-  .m-sub-right { gap: 5px; }
+  .m-sub-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .m-subtask .sched-btn { font-size: 14px; padding: 3px 6px; }
 
   .m-subtask .done-check { width: 15px; height: 15px; }
-  .m-subtask .sched-btn { font-size: 13px; padding: 2px 5px; }
   .m-subtask .ball-dot { opacity: 1; font-size: 13px; padding: 2px; }
-
+  .m-wait-mark { font-size: 13px; flex-shrink: 0; }
+  .m-subtask.subtask-done .m-sub-name { text-decoration: line-through; color: var(--muted); }
   /* due-date chip, colored by urgency */
   .m-due {
     font-size: 12px; font-weight: 700;
