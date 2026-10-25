@@ -41,8 +41,9 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   position: sticky; left: 0;
   background: var(--panel);
   z-index: 2;
-  width: 1%;                     
-  max-width: var(--grid-label-max, 320px);   
+  width: var(--grid-label-width, 300px);
+  min-width: var(--grid-label-width, 300px);
+  max-width: var(--grid-label-width, 300px);
   border-right: 1px solid var(--border);
 }
 
@@ -91,6 +92,13 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 .task-edit:hover { background: var(--neutral-bg); }
 .task-del:hover { background: var(--del-hover-bg); }
 .task-done .task-title { color: var(--muted); font-style: italic; }
+.task-title {
+  flex: 1 1 auto;
+  min-width: 0;                    /* allow it to shrink/truncate */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Subtask row — single compact line */
 .subtask-name { padding: 0; }
