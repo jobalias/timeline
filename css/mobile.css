@@ -332,6 +332,10 @@
     background: var(--c-yellow, #e0b64a);
     opacity: var(--swipe-strength, 0);
   }
+  .m-subtask[data-waiting="1"].swiping-left::before {
+    background: var(--offwhite, #f2efe6);   /* off-white */
+    opacity: var(--swipe-strength, 0);
+  }
 
   /* the icon — above the overlay, in the opened gap */
   .m-subtask::after {
@@ -353,6 +357,10 @@
     content: '🏓';
     right: 0; left: auto;
     opacity: var(--swipe-strength, 0);
+  }
+  .m-subtask[data-waiting="1"].swiping-left::after {
+    content: '🏐';
+    color: var(--text);   /* darker, in case of any non-emoji glyph */
   }
 
   /* sliding content — NO background override (that caused the boxes) */

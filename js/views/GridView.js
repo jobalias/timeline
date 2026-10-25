@@ -597,7 +597,7 @@ export class GridView {
     const waitMark = waiting ? '<span class="m-wait-mark" title="Waiting">🏓</span>' : '';
 
     return `
-      <div class="${rowCls}" data-task-id="${task.id}" data-sub-index="${si}" data-done="${st.done ? '1' : '0'}">
+      <div class="${rowCls}" data-task-id="${task.id}" data-sub-index="${si}" data-done="${st.done ? '1' : '0'}" data-waiting="${waiting ? '1' : '0'}">
         <div class="label-col m-sub-label">
           ${noteBadge}
           ${waitMark}
