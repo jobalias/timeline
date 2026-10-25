@@ -59,7 +59,7 @@
     will-change: transform;
   }
   .m-sub-label {
-    display: flex; align-items: center; gap: 7 px;
+    display: flex; align-items: center; gap: 7px;
     flex: 1; min-width: 0;
     position: static; padding: 0; border: none; background: none;
   }

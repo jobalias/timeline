@@ -1,8 +1,8 @@
 import { DAYS_SHOWN, WINDOW_LOOKBACK } from '../config.js';
-import { startOfDay, sameDay, parseYmd, escapeHtml, _isDueToday} from '../utils.js';
+import { startOfDay, sameDay, parseYmd, escapeHtml, _isDueToday } from '../utils.js';
 
 export class GridView {
-constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
+  constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
                        onOpenTaskNote, onOpenSubtaskNote, onToggleWaiting }) {
     this.store = store;
     this.onEditTask = onEditTask;
@@ -11,16 +11,37 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     this.onToggleDone = onToggleDone;
     this.onOpenTaskNote = onOpenTaskNote || (() => {});
     this.onOpenSubtaskNote = onOpenSubtaskNote || (() => {});
+    this.onToggleWaiting = onToggleWaiting || (() => {});
+
     this.showCompleted = false;
     this.wrap = document.getElementById('gridWrap');
-    this.onToggleWaiting = onToggleWaiting || (() => {});
+
     this.isMobile = window.innerWidth < 768;
     this.effectiveDays = this.isMobile ? 10 : DAYS_SHOWN;
     const halfWindow = Math.floor(this.effectiveDays / 2);
     this.windowStart = startOfDay(new Date());
     this.windowStart.setDate(this.windowStart.getDate() - halfWindow);
 
-    // click handling (edit / delete / schedule)
+    this._bindEvents();
+  }
+
+  // ==================================================================
+  //  EVENT BINDING
+  // ==================================================================
+  _bindEvents() {
+    this._bindButtonClicks();
+    this._bindDesktopNoteDblClick();
+    this._bindMobileNoteTap();
+    this._bindMobileSwipe();
+    this._bindCheckboxChange();
+    this._bindShowCompletedToggles();
+    this._bindScroll();
+    this._bindResize();
+    this._bindWindowNav();
+  }
+
+  // ----- Button clicks: edit / delete / schedule / waiting -----
+  _bindButtonClicks() {
     this.wrap.addEventListener('click', (e) => {
       const editBtn = e.target.closest('.task-edit');
       if (editBtn) { this.onEditTask(editBtn.dataset.taskId); return; }
@@ -34,29 +55,81 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
         return;
       }
 
-      // ball-in-court toggle
       const ballBtn = e.target.closest('.ball-dot');
       if (ballBtn) {
-        this.onToggleWaiting(
-          ballBtn.dataset.taskId,
-          parseInt(ballBtn.dataset.subIndex, 10)
-        );
+        this.onToggleWaiting(ballBtn.dataset.taskId, parseInt(ballBtn.dataset.subIndex, 10));
         return;
       }
     });
+  }
 
-    // ===== MOBILE swipe gestures on subtask rows =====
-    // swipe right → toggle complete;  swipe left → toggle waiting;  tap → (handled elsewhere, note)
+  // ----- DESKTOP: double-click a row → open note -----
+  _bindDesktopNoteDblClick() {
+    this.wrap.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.done-check') ||
+          e.target.closest('.sched-btn') ||
+          e.target.closest('.task-edit') ||
+          e.target.closest('.task-del') ||
+          e.target.closest('.ball-dot')) {
+        return;
+      }
+
+      const labelCol = e.target.closest('.label-col');
+      if (!labelCol) return;
+
+      // subtask row has a checkbox carrying the ids
+      const check = labelCol.querySelector('.done-check');
+      if (check) {
+        this.onOpenSubtaskNote(check.dataset.taskId, parseInt(check.dataset.subIndex, 10));
+        return;
+      }
+
+      // task row: .label-col with data-task-id, no checkbox
+      const taskId = labelCol.dataset.taskId;
+      if (taskId) this.onOpenTaskNote(taskId);
+    });
+  }
+
+  // ----- MOBILE: single-tap a row → open note -----
+  _bindMobileNoteTap() {
+    this.wrap.addEventListener('click', (e) => {
+      if (!this.isMobile) return;
+
+      // ignore interactive controls
+      if (e.target.closest('.sched-btn') ||
+          e.target.closest('.task-edit') ||
+          e.target.closest('.task-del')) {
+        return;
+      }
+
+      // subtask row? (whole .m-subtask row carries the ids)
+      const subRow = e.target.closest('.m-subtask');
+      if (subRow && subRow.dataset.subIndex !== undefined) {
+        this.onOpenSubtaskNote(subRow.dataset.taskId, parseInt(subRow.dataset.subIndex, 10));
+        return;
+      }
+
+      // task header? (.m-task-name specifically → unambiguous)
+      const taskHeader = e.target.closest('.m-task-name');
+      if (taskHeader && taskHeader.dataset.taskId) {
+        this.onOpenTaskNote(taskHeader.dataset.taskId);
+      }
+    });
+  }
+
+  // ----- MOBILE: swipe gestures on subtask rows -----
+  //  swipe right → toggle complete;  swipe left → toggle waiting;  tap → note
+  _bindMobileSwipe() {
     this._swipe = null;
-    const SWIPE_THRESHOLD = 60;   // px of horizontal travel to trigger
+    const SWIPE_THRESHOLD = 60;    // px horizontal travel to trigger
     const SWIPE_MAX_OFF_AXIS = 30; // max vertical drift to still count as horizontal
+    const REVEAL_AT = 15;          // px before the colored reveal shows
 
     this.wrap.addEventListener('touchstart', (e) => {
       if (!this.isMobile) return;
       const row = e.target.closest('.m-subtask');
       if (!row) { this._swipe = null; return; }
-      // don't start a swipe if the touch began on the clock button
-      if (e.target.closest('.sched-btn')) { this._swipe = null; return; }
+      if (e.target.closest('.sched-btn')) { this._swipe = null; return; } // don't swipe on the clock
 
       const t = e.touches[0];
       this._swipe = {
@@ -66,33 +139,31 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
         taskId: row.dataset.taskId,
         subIndex: parseInt(row.dataset.subIndex, 10),
         done: row.dataset.done === '1',
-        fired: false,
       };
     }, { passive: true });
 
     this.wrap.addEventListener('touchmove', (e) => {
-      if (!this._swipe || this._swipe.fired) return;
+      if (!this._swipe) return;
       const t = e.touches[0];
       const dx = t.clientX - this._swipe.startX;
       const dy = t.clientY - this._swipe.startY;
 
+      // vertical-dominant → it's a scroll, abandon the swipe
       if (Math.abs(dy) > SWIPE_MAX_OFF_AXIS && Math.abs(dy) > Math.abs(dx)) {
-        this._swipe.row.style.transform = '';
-        this._swipe.row.classList.remove('swiping-left', 'swiping-right');  // ← clear
+        this._resetSwipeRow(this._swipe.row);
         this._swipe = null;
         return;
       }
 
+      // horizontal-dominant → follow the finger + reveal the action color
       if (Math.abs(dx) > Math.abs(dy)) {
-        const clamped = Math.max(-80, Math.min(80, dx));
-        this._swipe.row.style.transform = `translateX(${clamped}px)`;
-
-        // ← toggle reveal based on direction + past a small reveal threshold
         const row = this._swipe.row;
-        if (dx > 15) {
+        row.style.transform = `translateX(${Math.max(-80, Math.min(80, dx))}px)`;
+
+        if (dx > REVEAL_AT) {
           row.classList.add('swiping-right');
           row.classList.remove('swiping-left');
-        } else if (dx < -15) {
+        } else if (dx < -REVEAL_AT) {
           row.classList.add('swiping-left');
           row.classList.remove('swiping-right');
         } else {
@@ -106,9 +177,9 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       this._swipe = null;
       if (!s) return;
 
-      s.row.classList.remove('swiping-left', 'swiping-right');   // ← clear reveal
+      // snap back + clear reveal
       s.row.style.transition = 'transform 0.15s ease';
-      s.row.style.transform = '';
+      this._resetSwipeRow(s.row);
       setTimeout(() => { s.row.style.transition = ''; }, 160);
 
       const t = (e.changedTouches && e.changedTouches[0]) || null;
@@ -116,101 +187,34 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       const dx = t.clientX - s.startX;
       const dy = t.clientY - s.startY;
 
-      // must be a clear horizontal swipe past threshold
-      if (Math.abs(dx) < SWIPE_THRESHOLD) return;      // too small → treat as tap (note opens via click)
-      if (Math.abs(dy) > Math.abs(dx)) return;         // too vertical → ignore
+      if (Math.abs(dx) < SWIPE_THRESHOLD) return;  // too small → tap (note opens via click)
+      if (Math.abs(dy) > Math.abs(dx)) return;     // too vertical → ignore
 
       if (dx > 0) {
-        // swipe RIGHT → toggle complete (same workflow as checkbox, incl. hours prompt)
-        this.onToggleDone(s.taskId, s.subIndex, !s.done);
+        this.onToggleDone(s.taskId, s.subIndex, !s.done);  // swipe right → toggle complete
       } else {
-        // swipe LEFT → toggle waiting
-        this.onToggleWaiting(s.taskId, s.subIndex);
+        this.onToggleWaiting(s.taskId, s.subIndex);         // swipe left → toggle waiting
       }
     }, { passive: true });
+  }
 
-    // double-click anywhere on a task/subtask row → open note popup
-    this.wrap.addEventListener('dblclick', (e) => {
-      // ignore double-clicks on interactive controls
-      if (e.target.closest('.done-check') ||
-          e.target.closest('.sched-btn') ||
-          e.target.closest('.task-edit') ||
-          e.target.closest('.task-del') ||
-          e.target.closest('.ball-dot')) {
-        return;
-      }
+  _resetSwipeRow(row) {
+    row.style.transform = '';
+    row.classList.remove('swiping-left', 'swiping-right');
+  }
 
-      const labelCol = e.target.closest('.label-col');
-      if (!labelCol) return;
-
-      // subtask row? (has a checkbox with the IDs)
-      this.wrap.addEventListener('click', (e) => {
-        if (!this.isMobile) return;
-
-        if (e.target.closest('.sched-btn') ||
-            e.target.closest('.task-edit') ||
-            e.target.closest('.task-del')) {
-          return;
-        }
-
-        // subtask row? (.m-sub-label carries the ids now)
-        const subLabel = e.target.closest('.m-sub-label');
-        if (subLabel && subLabel.dataset.subIndex !== undefined) {
-          this.onOpenSubtaskNote(subLabel.dataset.taskId, parseInt(subLabel.dataset.subIndex, 10));
-          return;
-        }
-
-        // task header?
-        const labelCol = e.target.closest('.label-col');
-        if (labelCol && labelCol.dataset.taskId && !labelCol.classList.contains('m-sub-label')) {
-          this.onOpenTaskNote(labelCol.dataset.taskId);
-        }
-      });
-
-      // task row? (.label-col with data-task-id but no checkbox)
-      const taskId = labelCol.dataset.taskId;
-      if (taskId) {
-        this.onOpenTaskNote(taskId);
-      }
-    });
-
-    // MOBILE: single-tap anywhere on a row opens the note (desktop keeps dblclick)
-    this.wrap.addEventListener('click', (e) => {
-      if (!this.isMobile) return;
-
-      // same control-exclusions as the dblclick handler
-      if (e.target.closest('.done-check') ||
-          e.target.closest('.sched-btn') ||
-          e.target.closest('.task-edit') ||
-          e.target.closest('.task-del') ||
-          e.target.closest('.ball-dot')) {
-        return;
-      }
-
-      const labelCol = e.target.closest('.label-col');
-      if (!labelCol) return;
-
-      const check = labelCol.querySelector('.done-check');
-      if (check) {
-        this.onOpenSubtaskNote(check.dataset.taskId, parseInt(check.dataset.subIndex, 10));
-        return;
-      }
-
-      const taskId = labelCol.dataset.taskId;
-      if (taskId) {
-        this.onOpenTaskNote(taskId);
-      }
-    });
-
-    // checkbox toggling (complete / un-complete)
+  // ----- Checkbox change (desktop complete/un-complete) -----
+  _bindCheckboxChange() {
     this.wrap.addEventListener('change', (e) => {
       const cb = e.target.closest('.done-check');
       if (cb) {
         this.onToggleDone(cb.dataset.taskId, parseInt(cb.dataset.subIndex, 10), cb.checked);
       }
     });
+  }
 
-    // show/hide completed toggle
+  // ----- Show completed toggles (grid header + settings modal) -----
+  _bindShowCompletedToggles() {
     const showCb = document.getElementById('showCompleted');
     if (showCb) {
       showCb.addEventListener('change', () => {
@@ -220,7 +224,6 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       });
     }
 
-    // show/hide completed toggle (settings modal — used on mobile)
     const showSetting = document.getElementById('showCompletedSetting');
     if (showSetting) {
       showSetting.addEventListener('change', () => {
@@ -229,19 +232,30 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
         this.render();
       });
     }
+  }
 
-    // reposition month labels on horizontal scroll
-    let scrollScheduled = false;
+  _syncShowCompletedControls() {
+    const a = document.getElementById('showCompleted');
+    const b = document.getElementById('showCompletedSetting');
+    if (a) a.checked = this.showCompleted;
+    if (b) b.checked = this.showCompleted;
+  }
+
+  // ----- Sticky month labels on horizontal scroll -----
+  _bindScroll() {
+    let scheduled = false;
     this.wrap.addEventListener('scroll', () => {
-      if (scrollScheduled) return;
-      scrollScheduled = true;
+      if (scheduled) return;
+      scheduled = true;
       requestAnimationFrame(() => {
         this._updateStickyMonths();
-        scrollScheduled = false;
+        scheduled = false;
       });
-    }, { passive: true });  
+    }, { passive: true });
+  }
 
-    // handle window resize
+  // ----- Re-render when crossing the mobile breakpoint -----
+  _bindResize() {
     window.addEventListener('resize', () => {
       const nowMobile = window.innerWidth < 768;
       if (nowMobile !== this.isMobile) {
@@ -249,8 +263,10 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
         this.render();
       }
     });
+  }
 
-    // ----- Grid window navigation (prev/next/today) -----
+  // ----- Grid window navigation (prev / next / today) -----
+  _bindWindowNav() {
     const prevBtn = document.getElementById('gridPrev');
     const nextBtn = document.getElementById('gridNext');
     const todayBtn = document.getElementById('gridToday');
@@ -260,11 +276,13 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     if (todayBtn) todayBtn.addEventListener('click', () => this._goToday());
   }
 
-  // ----- window navigation -----
+  // ==================================================================
+  //  WINDOW NAVIGATION
+  // ==================================================================
   _shiftWindow(days) {
     this.windowStart.setDate(this.windowStart.getDate() + days);
     this.render();
-    this.wrap.scrollLeft = 0; // reset horizontal scroll to show the new window start
+    this.wrap.scrollLeft = 0;
   }
 
   _goToday() {
@@ -281,25 +299,22 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
 
     const labelCol = this.wrap.querySelector('.label-col');
     const labelW = labelCol ? labelCol.offsetWidth : 0;
-
-    // width of one day column (to offset by 2 columns)
     const dayW = todayHead.offsetWidth;
-
-    // scroll so today sits ~2 columns from the left (after the label column)
     const target = todayHead.offsetLeft - labelW - (dayW * 2);
 
     this.wrap.scrollLeft = Math.max(0, target);
-
     requestAnimationFrame(() => this._updateStickyMonths());
   }
 
-  _syncShowCompletedControls() {
-    const a = document.getElementById('showCompleted');
-    const b = document.getElementById('showCompletedSetting');
-    if (a) a.checked = this.showCompleted;
-    if (b) b.checked = this.showCompleted;
+  onShow() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => this._scrollToToday());
+    });
   }
 
+  // ==================================================================
+  //  RENDER (entry point)
+  // ==================================================================
   render() {
     const tasks = this.store.getSorted();
     if (tasks.length === 0) {
@@ -308,19 +323,26 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       return;
     }
 
-    // mobile → list layout instead of the day-grid table
     if (this.isMobile) {
       this._renderMobileList(tasks);
       return;
     }
 
+    this._renderDesktopGrid(tasks);
+  }
+
+  // ==================================================================
+  //  DESKTOP GRID RENDER
+  // ==================================================================
+  _renderDesktopGrid(tasks) {
     const days = this._buildDays();
     const today = startOfDay(new Date());
     const dow = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+
     // ----- Month header row (spans consecutive same-month days) -----
-    const monthNames = ['January','February','March','April','May','June',
-      'July','August','September','October','November','December'];
     let monthRow = '<tr><th class="label-col month-corner"></th>';
     let mi = 0;
     while (mi < days.length) {
@@ -356,24 +378,23 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     tasks.forEach((task) => {
       const allDone = task.subtasks.length > 0 && task.subtasks.every((s) => s.done);
       if (!task.persistent && allDone && !this.showCompleted) return;
+
       const taskCls = allDone ? 'task-name task-done' : 'task-name';
       const taskNoteBadge = (task.note && task.note.trim())
-        ? '<span class="note-dot" title="Has a note"></span>'
-        : '';
+        ? '<span class="note-dot" title="Has a note"></span>' : '';
 
-      html += `<tr class="task-tr" style="--task-color:${task.color};"><td class="label-col ${taskCls}" data-task-id="${task.id}"
-                 style="--task-color:${task.color};">
-                 ${taskNoteBadge}
-                 <span class="task-title" title="${escapeHtml(task.name)}">${escapeHtml(task.name)}</span>
-                 <span class="task-btns">
-                   <button class="task-edit" data-task-id="${task.id}" title="Edit">✎</button>
-                   <button class="task-del" data-task-id="${task.id}" title="Delete">🗑</button>
-                 </span>
-               </td>`;
+      html += `<tr class="task-tr" style="--task-color:${task.color};">
+                 <td class="label-col ${taskCls}" data-task-id="${task.id}" style="--task-color:${task.color};">
+                   ${taskNoteBadge}
+                   <span class="task-title" title="${escapeHtml(task.name)}">${escapeHtml(task.name)}</span>
+                   <span class="task-btns">
+                     <button class="task-edit" data-task-id="${task.id}" title="Edit">✎</button>
+                     <button class="task-del" data-task-id="${task.id}" title="Delete">🗑</button>
+                   </span>
+                 </td>`;
       days.forEach(() => (html += '<td class="cell"></td>'));
       html += '</tr>';
 
-      // sort subtasks: incomplete first, done last
       const sortedSubs = task.subtasks
         .map((st, si) => ({ st, si }))
         .sort((a, b) => (a.st.done ? 1 : 0) - (b.st.done ? 1 : 0));
@@ -386,68 +407,45 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
 
     html += '</tbody></table>';
     this.wrap.innerHTML = html;
-
     this._updateStickyMonths();
-  }
-
-  onShow() {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => this._scrollToToday());
-    });
   }
 
   _renderSubtaskRow(task, st, si, days, today) {
     const dueToday = !st.done && st.due && _isDueToday(st);
-
     const waiting = st.waiting;
+
     const rowCls = st.done ? 'subtask-name subtask-done'
       : (dueToday ? 'subtask-name due-today' : 'subtask-name')
       + (waiting ? ' subtask-waiting' : '');
 
-    // clock button state
-    const clockCls = st.done
-      ? 'sched-btn clock-done'
+    const clockCls = st.done ? 'sched-btn clock-done'
       : (st.remainingHours > 0 ? 'sched-btn clock-pending' : 'sched-btn clock-full');
     const clockDisabled = st.done ? 'disabled' : '';
 
-    // single due-today marker (no status badge, no "time left")
     const dueBadge = `<span class="due-today-badge">${dueToday ? '⚠️' : ''}</span>`;
-
     const noteBadge = (st.note && st.note.trim())
-      ? '<span class="note-dot" title="Has a note"></span>'
-      : '';
+      ? '<span class="note-dot" title="Has a note"></span>' : '';
 
-    const ballBtn = `<button class="ball-dot" data-task-id="${task.id}"
-      data-sub-index="${si}"
+    const ballBtn = `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
       title="${waiting ? 'Ball in their court — click to restore' : 'Waiting on someone? Click to minimize'}">
       ${waiting ? '🏓' : '🏐'}</button>`;
 
-    let html = `<tr class="subtask-tr" style="--task-color:${task.color};"><td class="label-col ${rowCls}">
-        ${noteBadge}
-        <div class="st-row">
-          ${waiting ? '' : `<input type="checkbox" class="done-check"
-            data-task-id="${task.id}" data-sub-index="${si}"
-            ${st.done ? 'checked' : ''}>`}
-          <span class="st-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
-          ${waiting ? '' : dueBadge}
-          ${waiting ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
-            data-sub-index="${si}" ${clockDisabled}>⏰</button>`}
-          ${ballBtn}
-        </div>
-      </td>`;
+    let html = `<tr class="subtask-tr" style="--task-color:${task.color};">
+        <td class="label-col ${rowCls}">
+          ${noteBadge}
+          <div class="st-row">
+            ${waiting ? '' : `<input type="checkbox" class="done-check"
+              data-task-id="${task.id}" data-sub-index="${si}" ${st.done ? 'checked' : ''}>`}
+            <span class="st-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
+            ${waiting ? '' : dueBadge}
+            ${waiting ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
+              data-sub-index="${si}" ${clockDisabled}>⏰</button>`}
+            ${ballBtn}
+          </div>
+        </td>`;
     html += this._renderSubtaskCells(st, days, today, task.color);
     html += '</tr>';
     return html;
-  }
-
-  _buildDays() {
-    const days = [];
-    for (let i = 0; i < this.effectiveDays; i++) {
-      const d = new Date(this.windowStart);
-      d.setDate(d.getDate() + i);
-      days.push(d);
-    }
-    return days;
   }
 
   _renderSubtaskCells(st, days, today, color) {
@@ -469,7 +467,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
 
       let content = '';
       if (isDue) {
-        content = '<div class="square"></div>'; // red ✕ for due date
+        content = '<div class="square"></div>';
       } else if (dayHours > 0) {
         const clr = st.done ? 'var(--muted)' : color;
         content = `<span class="hours-centered" style="color:${clr};">${dayHours}h</span>`;
@@ -478,6 +476,16 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       html += `<td class="${cls}">${content}</td>`;
     });
     return html;
+  }
+
+  _buildDays() {
+    const days = [];
+    for (let i = 0; i < this.effectiveDays; i++) {
+      const d = new Date(this.windowStart);
+      d.setDate(d.getDate() + i);
+      days.push(d);
+    }
+    return days;
   }
 
   // ----- Sticky, centered month labels on horizontal scroll -----
@@ -491,7 +499,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
 
     const monthHeads = this.wrap.querySelectorAll('.month-head');
 
-    // READ phase — gather all measurements first
+    // READ phase
     const measurements = [];
     monthHeads.forEach((th) => {
       const label = th.querySelector('.month-label');
@@ -504,7 +512,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       });
     });
 
-    // WRITE phase — apply transforms (no interleaved reads)
+    // WRITE phase
     measurements.forEach(({ label, thLeft, thWidth, labelW }) => {
       const thRight = thLeft + thWidth;
       if (thRight <= viewLeft || thLeft >= viewRight) {
@@ -522,9 +530,11 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     });
   }
 
+  // ==================================================================
+  //  MOBILE LIST RENDER
+  // ==================================================================
   _renderMobileList(tasks) {
     const today = startOfDay(new Date());
-
     let html = '<div class="mobile-list">';
 
     tasks.forEach((task) => {
@@ -535,7 +545,6 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       const taskNoteBadge = (task.note && task.note.trim())
         ? '<span class="note-dot" title="Has a note"></span>' : '';
 
-      // task header (label-col + data-task-id so dblclick→note and edit/del work)
       html += `
         <div class="m-task" style="--task-color:${task.color};">
           <div class="label-col ${taskCls}" data-task-id="${task.id}" style="--task-color:${task.color};">
@@ -547,7 +556,6 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
             </span>
           </div>`;
 
-      // subtasks (incomplete first, done last)
       const sortedSubs = task.subtasks
         .map((st, si) => ({ st, si }))
         .sort((a, b) => (a.st.done ? 1 : 0) - (b.st.done ? 1 : 0));
@@ -565,9 +573,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
   }
 
   _renderMobileSubtask(task, st, si, today) {
-    const dueToday = !st.done && st.due && _isDueToday(st);
     const waiting = st.waiting;
-
     const rowCls = st.done ? 'm-subtask subtask-done'
       : (waiting ? 'm-subtask subtask-waiting' : 'm-subtask');
 
@@ -579,14 +585,11 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     const clockDisabled = st.done ? 'disabled' : '';
 
     const dueChip = this._mobileDueChip(st, today);
-
-    // paddle shown only when waiting (visual marker)
     const waitMark = waiting ? '<span class="m-wait-mark" title="Waiting">🏓</span>' : '';
 
     return `
-      <div class="${rowCls}" data-task-id="${task.id}" data-sub-index="${si}"
-          data-done="${st.done ? '1' : '0'}">
-        <div class="label-col m-sub-label" data-task-id="${task.id}" data-sub-index="${si}">
+      <div class="${rowCls}" data-task-id="${task.id}" data-sub-index="${si}" data-done="${st.done ? '1' : '0'}">
+        <div class="label-col m-sub-label">
           ${noteBadge}
           ${waitMark}
           <span class="m-sub-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
@@ -604,15 +607,14 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     if (!st.due) return '<span class="m-due m-due-none">—</span>';
 
     const due = parseYmd(st.due);
-    const msPerDay = 86400000;
-    const daysLeft = Math.round((startOfDay(due) - today) / msPerDay);
+    const daysLeft = Math.round((startOfDay(due) - today) / 86400000);
 
     let cls, label;
-    if (daysLeft < 0) { cls = 'm-due-overdue'; label = `${Math.abs(daysLeft)}d ago`; }
+    if (daysLeft < 0)        { cls = 'm-due-overdue'; label = `${Math.abs(daysLeft)}d ago`; }
     else if (daysLeft === 0) { cls = 'm-due-overdue'; label = 'Today'; }
-    else if (daysLeft <= 3) { cls = 'm-due-soon'; label = `${daysLeft}d`; }
-    else if (daysLeft <= 7) { cls = 'm-due-week'; label = `${daysLeft}d`; }
-    else { cls = 'm-due-far'; label = this._fmtShortDate(due); }
+    else if (daysLeft <= 3)  { cls = 'm-due-soon';    label = `${daysLeft}d`; }
+    else if (daysLeft <= 7)  { cls = 'm-due-week';    label = `${daysLeft}d`; }
+    else                     { cls = 'm-due-far';     label = this._fmtShortDate(due); }
 
     if (st.done) cls = 'm-due-done';
 
