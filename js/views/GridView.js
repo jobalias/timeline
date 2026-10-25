@@ -480,9 +480,10 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       : (st.remainingHours > 0 ? 'sched-btn clock-pending' : 'sched-btn clock-full');
     const clockDisabled = st.done ? 'disabled' : '';
 
-    const ballBtn = `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
-        title="${waiting ? 'Ball in their court' : 'Waiting on someone?'}">${waiting ? '🏓' : '🏐'}</button>`;
-
+    const ballBtn = waiting
+      ? `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
+          title="Waiting — tap to clear">🏓</button>`
+      : '';
     // due-date chip, colored by urgency
     const dueChip = this._mobileDueChip(st, today);
 

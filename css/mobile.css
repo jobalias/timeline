@@ -31,7 +31,7 @@
   /* task header */
   .m-task .label-col.m-task-name {
     display: flex; align-items: center; gap: 8px;
-    padding: 12px 14px;
+    padding: 12px 14px 12px 5px;
     font-weight: 700; font-size: 15px;
     background: color-mix(in srgb, var(--task-color) 12%, var(--panel));
     border-left: 4px solid var(--task-color);
@@ -48,13 +48,13 @@
   /* subtask rows */
   .m-subtask {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 10px; padding: 10px 14px;
+    gap: 6px; padding: 10px 1px;
     border-top: 1px solid var(--cell-border);
     border-left: 4px solid var(--task-color);
     background: color-mix(in srgb, var(--task-color) 4%, var(--panel));
   }
   .m-sub-label {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 7 px;
     flex: 1; min-width: 0;
     position: static; padding: 0; border: none; background: none;
   }
@@ -65,18 +65,17 @@
   }
   .m-subtask.subtask-done .m-sub-name { text-decoration: line-through; color: var(--muted); }
 
-  .m-sub-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .m-sub-right { gap: 5px; }
 
-  /* bigger tap targets */
-  .m-subtask .done-check { width: 22px; height: 22px; }
-  .m-subtask .sched-btn { font-size: 16px; padding: 4px 8px; }
-  .m-subtask .ball-dot { opacity: 1; font-size: 16px; padding: 4px; }  /* always visible */
+  .m-subtask .done-check { width: 15px; height: 15px; }
+  .m-subtask .sched-btn { font-size: 13px; padding: 2px 5px; }
+  .m-subtask .ball-dot { opacity: 1; font-size: 13px; padding: 2px; }
 
   /* due-date chip, colored by urgency */
   .m-due {
     font-size: 12px; font-weight: 700;
     padding: 3px 8px; border-radius: 20px;
-    white-space: nowrap; min-width: 44px; text-align: center;
+    white-space: nowrap; min-width: 30px; text-align: center;
   }
   .m-due-overdue { background: var(--c-red-100); color: var(--c-red-dark); }
   .m-due-soon    { background: var(--c-amber-100); color: var(--c-orange-700); }
@@ -86,8 +85,8 @@
   .m-due-done    { background: transparent; color: var(--muted); opacity: 0.6; }
 
   /* note dot positioning in flex context */
-  .m-task .note-dot, .m-subtask .note-dot { position: static; font-size: 11px; }
- 
+  .m-task .note-dot, .m-subtask .note-dot { position: static; font-size: 8px; }
+
 /* --- Toolbar: one tidy row --- */
   .toolbar {
         display: flex;
