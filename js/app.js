@@ -203,6 +203,8 @@ class App {
       toggle.checked = this.store.getCalendarSyncEnabled();
       this.calendarPicker.populateList();
       this._renderAlwaysList();
+      const sc = document.getElementById('showCompletedSetting');   // ← ADD
+      if (sc) sc.checked = this.grid.showCompleted;                 // ← ADD
       backdrop.classList.add('open');
     });
 

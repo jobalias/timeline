@@ -6,7 +6,9 @@
 .progress-week {
   display: flex; gap: var(--gap-md);
   overflow-x: auto; overflow-y: hidden;
-  padding-bottom: var(--gap-md); scroll-snap-type: x proximity; min-height: var(--prog-min-height);
+  padding-bottom: var(--gap-md); scroll-snap-type: x proximity;
+  height: calc(100dvh - 280px);   
+  align-items: stretch;
 }
 .progress-week::-webkit-scrollbar { height: 10px; }
 .progress-week::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 5px; }
@@ -16,7 +18,8 @@
 .prog-day {
   flex: 0 0 var(--prog-day-width); scroll-snap-align: start;
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  padding: 10px; display: flex; flex-direction: column; gap: var(--gap-sm); min-height: 200px;
+  padding: 10px; display: flex; flex-direction: column; gap: var(--gap-sm);
+  height: 100%; min-height: 0;   /* fill the strip, don't grow to content */
 }
 .prog-day.prog-today { border-color: var(--accent); box-shadow: 0 0 0 2px var(--c-blue-tint-15); }
 
@@ -26,10 +29,16 @@
 .prog-today .prog-date { color: var(--accent); }
 .prog-month { font-size: var(--fs-tiny); color: var(--muted); text-transform: uppercase; }
 
-.prog-items { display: flex; flex-direction: column; gap: var(--gap-sm); flex: 1; }
+.prog-items {
+  display: flex; flex-direction: column; gap: var(--gap-sm);
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto;   /* scroll within a day if it has many cards */
+}
 .prog-empty { flex: 1; }
-.prog-count { text-align: center; font-size: 11px; font-weight: 600; color: var(--green); margin-top: auto; }
-
+.prog-count {
+  text-align: center; font-size: 11px; font-weight: 600; color: var(--green);
+  margin-top: auto; flex: 0 0 auto;   /* ← added flex to keep it pinned */
+}
 .prog-chip {
   display: flex; align-items: flex-start; gap: 6px;
   background: var(--chip-bg); border: 1px solid var(--chip-border); border-radius: 10px;

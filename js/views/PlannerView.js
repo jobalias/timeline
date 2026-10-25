@@ -6,6 +6,7 @@ export class PlannerView {
     this.store = store;
     this.gcal = googleCalendar;
     this.settings = settings;
+    this.isMobile = window.innerWidth < 768;
     this.isActive = false;
     this.calendar = null;
     this.selectedSubtask = null; // { taskId, subIndex }
@@ -30,14 +31,27 @@ export class PlannerView {
         this._deleteClickedBlock();
       }
     });
+
+    window.addEventListener('resize', () => {
+      const nowMobile = window.innerWidth < 768;
+      if (nowMobile !== this.isMobile) {
+        this.isMobile = nowMobile;
+        // rebuild the calendar with the right config
+        if (this.calendar) { this.calendar.destroy(); this.calendar = null; }
+        if (this.isActive) { this._initCalendar(); this.render(); }
+        this._applyMobilePlannerUI();   // (added in Piece 2)
+      }
+    });
   }
 
   activate() {
-    this.isActive = true;
-    if (!this.calendar) this._initCalendar();
-    else { this.calendar.updateSize(); this.calendar.refetchEvents(); }
-    this.render();
-  }
+  this.isActive = true;
+  if (!this.calendar) this._initCalendar();
+  else { this.calendar.updateSize(); this.calendar.refetchEvents(); }
+  this._bindMobileMenu();        
+  this._applyMobilePlannerUI(); 
+  this.render();
+}
 
   deactivate() { this.isActive = false; }
 
@@ -101,25 +115,38 @@ export class PlannerView {
   }
 
   _initCalendar() {
+    const mobile = this.isMobile;
+
     this.calendar = new FullCalendar.Calendar(this.calendarEl, {
-      initialView: 'timeGridWeek',
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: 'timeGridDay,timeGridWeek,dayGridMonth',
+      initialView: mobile ? 'timeGridThreeDay' : 'timeGridWeek',
+
+      // mobile: hide FC's own toolbar (we use our hamburger + Add Task instead)
+      headerToolbar: mobile
+        ? false
+        : {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridDay,timeGridWeek,dayGridMonth',
+          },
+
+      buttonText: {
+        today: 'Today', day: 'Day', week: 'Week', month: 'Month',
       },
-      buttonText: {                  
-        today: 'Today',
-        day: 'Day',
-        week: 'Week',
-        month: 'Month',
-      },
+
       views: {
-        timeGridWeek: { duration: { days: 7 }, dateIncrement: { days: 1 }, buttonText: 'Week'},
+        timeGridWeek: { duration: { days: 7 }, dateIncrement: { days: 1 }, buttonText: 'Week' },
+        // custom 3-day view for mobile, scrolls one day at a time
+        timeGridThreeDay: {
+          type: 'timeGrid',
+          duration: { days: 3 },
+          dateIncrement: { days: 1 },
+          buttonText: '3 Day',
+        },
       },
+
       nowIndicator: true,
-      slotDuration: '00:30:00',      // 30-min grid lines (or '00:15:00' for finer)
-      slotLabelInterval: '01:00:00', // label every hour
+      slotDuration: '00:30:00',
+      slotLabelInterval: '01:00:00',
       slotMinTime: '06:00:00',
       scrollTime: '08:00:00',
       allDaySlot: false,
@@ -127,6 +154,11 @@ export class PlannerView {
       expandRows: true,
       firstDay: 1,
       snapDuration: '00:15:00',
+
+      // touch: long-press to start creating/dragging on mobile
+      longPressDelay: 300,
+      selectLongPressDelay: 300,
+      eventLongPressDelay: 300,
 
       selectable: true,
       selectMirror: true,
@@ -141,8 +173,6 @@ export class PlannerView {
         this._loadEvents(info.start, info.end).then(success).catch(failure);
       },
 
-      // emphasis via classes (re-runs on every render — reliable)
-      // emphasis via classes (re-runs on every render — reliable)
       eventClassNames: (arg) => {
         const p = arg.event.extendedProps;
         if (p.kind !== 'block') return [];
@@ -151,22 +181,20 @@ export class PlannerView {
         if (p.taskId === this.selectedSubtask.taskId) return ['block-sibling'];
         return ['block-dimmed'];
       },
-      // Highlight the selected subtask's due-date column in red
-      dayCellClassNames: (arg) => {
-        return this._isDueDate(arg.date) ? ['due-date-column'] : [];
-      },
-      dayHeaderClassNames: (arg) => {
-        return this._isDueDate(arg.date) ? ['due-date-header'] : [];
-      },
+      dayCellClassNames: (arg) => (this._isDueDate(arg.date) ? ['due-date-column'] : []),
+      dayHeaderClassNames: (arg) => (this._isDueDate(arg.date) ? ['due-date-header'] : []),
       datesSet: () => {
-        this._highlightDueColumn(); 
+        this._highlightDueColumn();
         this._renderBacklog();
+      },
+      dateClick: () => {
+        this._clearClickedBlock(); 
+        this.calendar.unselect();
       },
       select: (info) => this._onSelectRange(info),
       eventDrop: (info) => this._onEventChanged(info),
       eventResize: (info) => this._onEventChanged(info),
       eventClick: (info) => this._onEventClick(info),
-
       eventDidMount: (info) => {
         info.el.addEventListener('dblclick', () => this._onEventDblClick(info));
       },
@@ -330,6 +358,7 @@ export class PlannerView {
       alert('Failed to create: ' + (e.result?.error?.message || e.message));
     } finally {
       this._creating = false;
+      this._clearClickedBlock();
     }
   }
 
@@ -378,6 +407,7 @@ export class PlannerView {
     }
 
     this.store.setSubtaskBlocks(p.taskId, p.subIndex, st.blocks);
+    this._clearClickedBlock();
     this._renderBacklog();
     this._updateCounter();
   }
@@ -415,6 +445,11 @@ export class PlannerView {
     // Case 3: different task OR nothing selected
     if (!this.selectedSubtask) {
       this._switchSelection(p.taskId, p.subIndex); // first selection = easy
+      return;
+    }
+
+    if (this.isMobile) {
+      this._switchSelection(p.taskId, p.subIndex);
       return;
     }
   }
@@ -721,5 +756,87 @@ export class PlannerView {
   _esc(s) {
     return String(s).replace(/[&<>"']/g, (c) =>
       ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  _bindMobileMenu() {
+    if (this._mobileMenuBound) return;   // bind once
+    this._mobileMenuBound = true;
+
+    const btn = document.getElementById('plannerMenuBtn');
+    const panel = document.getElementById('plannerMenuPanel');
+    
+    if (!btn || !panel) return;
+    if (!this._touchResetBound) {
+      this._touchResetBound = true;
+      this.calendarEl.addEventListener('touchend', () => {
+        // give FC a tick, then clear any stuck selection state
+        setTimeout(() => {
+          if (this.calendar) this.calendar.unselect();
+        }, 0);
+      }, { passive: true });
+    }
+    // toggle panel
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this._clickedBlock && !e.target.closest('.fc-event')) {
+        this._clearClickedBlock();
+      }
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+      this._updateMobileViewButtons();
+    });
+
+    // close when tapping outside
+    document.addEventListener('click', (e) => {
+      if (panel.style.display !== 'none' &&
+          !panel.contains(e.target) && e.target !== btn) {
+        panel.style.display = 'none';
+      }
+    });
+
+    // day navigation
+    document.getElementById('plannerPrevDay')?.addEventListener('click', () => this.calendar.prev());
+    document.getElementById('plannerTodayBtn')?.addEventListener('click', () => this.calendar.today());
+    document.getElementById('plannerNextDay')?.addEventListener('click', () => this.calendar.next());
+    
+    // view switcher
+    panel.querySelectorAll('.pm-views button').forEach((vb) => {
+      vb.addEventListener('click', () => {
+        this.calendar.changeView(vb.dataset.view);
+        this._updateMobileViewButtons();
+      });
+    });
+
+    // refresh (reuse the same reconcile path as desktop refresh)
+    document.getElementById('pmRefresh').addEventListener('click', () => {
+      document.getElementById('plannerRefreshBtn')?.click();  // triggers app._reconcile()
+      panel.style.display = 'none';
+    });
+
+    // hide-fully-scheduled (mobile) — sync with desktop checkbox + state
+    const mobileHide = document.getElementById('hideScheduledMobile');
+    if (mobileHide) {
+      mobileHide.checked = this.hideScheduled;
+      mobileHide.addEventListener('change', () => {
+        this.hideScheduled = mobileHide.checked;
+        const desktopHide = document.getElementById('hideScheduled');
+        if (desktopHide) desktopHide.checked = this.hideScheduled;
+        this._renderBacklog();
+      });
+    }
+  }
+
+  _updateMobileViewButtons() {
+    const panel = document.getElementById('plannerMenuPanel');
+    if (!panel) return;
+    const current = this.calendar?.view?.type;
+    panel.querySelectorAll('.pm-views button').forEach((vb) => {
+      vb.classList.toggle('active', vb.dataset.view === current);
+    });
+  }
+
+  _applyMobilePlannerUI() {
+    // placeholder hook for anything that must change when crossing the breakpoint.
+    // (the CSS handles show/hide; this is here so the resize handler can call it)
+    this._updateMobileViewButtons();
   }
 }

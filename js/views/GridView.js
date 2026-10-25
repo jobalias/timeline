@@ -76,6 +76,34 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       }
     });
 
+    // MOBILE: single-tap anywhere on a row opens the note (desktop keeps dblclick)
+    this.wrap.addEventListener('click', (e) => {
+      if (!this.isMobile) return;
+
+      // same control-exclusions as the dblclick handler
+      if (e.target.closest('.done-check') ||
+          e.target.closest('.sched-btn') ||
+          e.target.closest('.task-edit') ||
+          e.target.closest('.task-del') ||
+          e.target.closest('.ball-dot')) {
+        return;
+      }
+
+      const labelCol = e.target.closest('.label-col');
+      if (!labelCol) return;
+
+      const check = labelCol.querySelector('.done-check');
+      if (check) {
+        this.onOpenSubtaskNote(check.dataset.taskId, parseInt(check.dataset.subIndex, 10));
+        return;
+      }
+
+      const taskId = labelCol.dataset.taskId;
+      if (taskId) {
+        this.onOpenTaskNote(taskId);
+      }
+    });
+
     // checkbox toggling (complete / un-complete)
     this.wrap.addEventListener('change', (e) => {
       const cb = e.target.closest('.done-check');
@@ -89,6 +117,17 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     if (showCb) {
       showCb.addEventListener('change', () => {
         this.showCompleted = showCb.checked;
+        this._syncShowCompletedControls();
+        this.render();
+      });
+    }
+
+    // show/hide completed toggle (settings modal — used on mobile)
+    const showSetting = document.getElementById('showCompletedSetting');
+    if (showSetting) {
+      showSetting.addEventListener('change', () => {
+        this.showCompleted = showSetting.checked;
+        this._syncShowCompletedControls();
         this.render();
       });
     }
@@ -103,6 +142,15 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
         scrollScheduled = false;
       });
     }, { passive: true });  
+
+    // handle window resize
+    window.addEventListener('resize', () => {
+      const nowMobile = window.innerWidth < 768;
+      if (nowMobile !== this.isMobile) {
+        this.isMobile = nowMobile;
+        this.render();
+      }
+    });
 
     // ----- Grid window navigation (prev/next/today) -----
     const prevBtn = document.getElementById('gridPrev');
@@ -147,11 +195,24 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
     requestAnimationFrame(() => this._updateStickyMonths());
   }
 
+  _syncShowCompletedControls() {
+    const a = document.getElementById('showCompleted');
+    const b = document.getElementById('showCompletedSetting');
+    if (a) a.checked = this.showCompleted;
+    if (b) b.checked = this.showCompleted;
+  }
+
   render() {
     const tasks = this.store.getSorted();
     if (tasks.length === 0) {
       this.wrap.innerHTML =
         '<div class="empty">No tasks yet. Click “+ Add Task” to start.</div>';
+      return;
+    }
+
+    // mobile → list layout instead of the day-grid table
+    if (this.isMobile) {
+      this._renderMobileList(tasks);
       return;
     }
 
@@ -361,5 +422,109 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       if (offset > maxOffset) offset = Math.max(0, maxOffset);
       label.style.transform = `translateX(${offset}px)`;
     });
+  }
+
+  _renderMobileList(tasks) {
+    const today = startOfDay(new Date());
+
+    let html = '<div class="mobile-list">';
+
+    tasks.forEach((task) => {
+      const allDone = task.subtasks.length > 0 && task.subtasks.every((s) => s.done);
+      if (!task.persistent && allDone && !this.showCompleted) return;
+
+      const taskCls = allDone ? 'm-task-name task-done' : 'm-task-name';
+      const taskNoteBadge = (task.note && task.note.trim())
+        ? '<span class="note-dot" title="Has a note"></span>' : '';
+
+      // task header (label-col + data-task-id so dblclick→note and edit/del work)
+      html += `
+        <div class="m-task" style="--task-color:${task.color};">
+          <div class="label-col ${taskCls}" data-task-id="${task.id}" style="--task-color:${task.color};">
+            ${taskNoteBadge}
+            <span class="task-title" title="${escapeHtml(task.name)}">${escapeHtml(task.name)}</span>
+            <span class="task-btns">
+              <button class="task-edit" data-task-id="${task.id}" title="Edit">✎</button>
+              <button class="task-del" data-task-id="${task.id}" title="Delete">🗑</button>
+            </span>
+          </div>`;
+
+      // subtasks (incomplete first, done last)
+      const sortedSubs = task.subtasks
+        .map((st, si) => ({ st, si }))
+        .sort((a, b) => (a.st.done ? 1 : 0) - (b.st.done ? 1 : 0));
+
+      sortedSubs.forEach(({ st, si }) => {
+        if (st.done && !this.showCompleted) return;
+        html += this._renderMobileSubtask(task, st, si, today);
+      });
+
+      html += '</div>'; // .m-task
+    });
+
+    html += '</div>';
+    this.wrap.innerHTML = html;
+  }
+
+  _renderMobileSubtask(task, st, si, today) {
+    const dueToday = !st.done && st.due && _isDueToday(st);
+    const waiting = st.waiting;
+
+    const rowCls = st.done ? 'm-subtask subtask-done'
+      : (waiting ? 'm-subtask subtask-waiting' : 'm-subtask');
+
+    const noteBadge = (st.note && st.note.trim())
+      ? '<span class="note-dot" title="Has a note"></span>' : '';
+
+    const clockCls = st.done ? 'sched-btn clock-done'
+      : (st.remainingHours > 0 ? 'sched-btn clock-pending' : 'sched-btn clock-full');
+    const clockDisabled = st.done ? 'disabled' : '';
+
+    const ballBtn = `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
+        title="${waiting ? 'Ball in their court' : 'Waiting on someone?'}">${waiting ? '🏓' : '🏐'}</button>`;
+
+    // due-date chip, colored by urgency
+    const dueChip = this._mobileDueChip(st, today);
+
+    // label-col wrapper carries the checkbox data so dblclick→subtask-note works
+    return `
+      <div class="${rowCls}">
+        <div class="label-col m-sub-label">
+          ${noteBadge}
+          ${waiting ? '' : `<input type="checkbox" class="done-check"
+            data-task-id="${task.id}" data-sub-index="${si}" ${st.done ? 'checked' : ''}>`}
+          <span class="m-sub-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
+        </div>
+        <div class="m-sub-right">
+          ${dueChip}
+          ${waiting ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
+            data-sub-index="${si}" ${clockDisabled}>⏰</button>`}
+          ${ballBtn}
+        </div>
+      </div>`;
+  }
+
+  // due-date chip colored by time left
+  _mobileDueChip(st, today) {
+    if (!st.due) return '<span class="m-due m-due-none">—</span>';
+
+    const due = parseYmd(st.due);
+    const msPerDay = 86400000;
+    const daysLeft = Math.round((startOfDay(due) - today) / msPerDay);
+
+    let cls, label;
+    if (daysLeft < 0) { cls = 'm-due-overdue'; label = `${Math.abs(daysLeft)}d ago`; }
+    else if (daysLeft === 0) { cls = 'm-due-overdue'; label = 'Today'; }
+    else if (daysLeft <= 3) { cls = 'm-due-soon'; label = `${daysLeft}d`; }
+    else if (daysLeft <= 7) { cls = 'm-due-week'; label = `${daysLeft}d`; }
+    else { cls = 'm-due-far'; label = this._fmtShortDate(due); }
+
+    if (st.done) cls = 'm-due-done';
+
+    return `<span class="m-due ${cls}">${label}</span>`;
+  }
+
+  _fmtShortDate(d) {
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 }

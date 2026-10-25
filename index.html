@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/planner.css">
   <link rel="stylesheet" href="css/progress.css">
   <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/mobile.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -100,12 +101,39 @@
     <!-- ===== PLANNER VIEW ===== -->
     <div id="plannerViewContainer" style="display:none;">
       <div class="planner-toolbar">
+        <!-- ☰ mobile menu button (hidden on desktop) -->
+        <button class="icon-btn planner-menu-btn" id="plannerMenuBtn" title="Menu">☰</button>
+        <button class="icon-btn planner-nav-arrow" id="plannerPrevDay" title="Previous">‹</button>
+        <button class="planner-today-btn" id="plannerTodayBtn">Now</button>
+        <button class="icon-btn planner-nav-arrow" id="plannerNextDay" title="Next">›</button>
+        <!-- desktop items (hidden on mobile) -->
         <button class="primary" id="plannerAddTaskBtn">+ Add Task</button>
         <button id="plannerRefreshBtn">🔄 Refresh</button>
-        <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
+        <label class="planner-hide-label" style="display:flex;align-items:center;gap:4px;font-size:13px;">
           <input type="checkbox" id="hideScheduled"> Hide fully scheduled
         </label>
         <span class="planner-hint">Select a subtask below, then drag on the calendar to schedule it.</span>
+
+        <!-- mobile dropdown panel (hidden on desktop) -->
+        <div class="planner-menu-panel" id="plannerMenuPanel" style="display:none;">
+
+          <div class="pm-section">
+            <div class="pm-label">View</div>
+            <div class="pm-views">
+              <button data-view="timeGridDay">Day</button>
+              <button data-view="timeGridThreeDay">3 Day</button>
+              <button data-view="timeGridWeek">Week</button>
+              <button data-view="dayGridMonth">Month</button>
+            </div>
+          </div>
+
+          <div class="pm-section">
+            <label class="pm-check">
+              <input type="checkbox" id="hideScheduledMobile"> Hide fully scheduled
+            </label>
+            <button id="pmRefresh" class="pm-refresh">🔄 Refresh</button>
+          </div>
+        </div>
       </div>
 
       <div class="planner-layout">
@@ -182,6 +210,17 @@
         </div>
         <label class="switch">
           <input type="checkbox" id="syncToggle">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <div class="settings-row-title">Show completed tasks</div>
+          <div class="settings-row-desc">Display tasks and subtasks that are fully done.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="showCompletedSetting">
           <span class="switch-slider"></span>
         </label>
       </div>
