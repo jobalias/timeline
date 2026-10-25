@@ -8,7 +8,8 @@
   padding-left: 0;              /* ← no left padding, so sticky col is flush */
   max-height: var(--grid-max-height);
 }
-.grid-wrap td, .grid-wrap th { contain: layout style; }
+.grid-wrap td:not(.label-col),
+.grid-wrap th:not(.label-col) { contain: layout style; }
 
 .main-split .grid-wrap {
   flex: 2 1 0;
@@ -38,9 +39,11 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 .label-col {
   text-align: left; padding: 4px 12px;
   position: sticky; left: 0;
-  background: var(--panel);     /* opaque */
+  background: var(--panel);
   z-index: 2;
-  min-width: var(--grid-label-width); border-right: 1px solid var(--border);
+  width: 1%;                     
+  max-width: var(--grid-label-max, 320px);   
+  border-right: 1px solid var(--border);
 }
 
 /* ===== Row tinting + spine (via .task-tr / .subtask-tr on <tr>) ===== */
@@ -93,18 +96,19 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 .subtask-name { padding: 0; }
 .st-row {
   display: flex; align-items: center; gap: 5px;
-  padding: 1px 0 1px 10px;   /* 10px (+ the 3px spine ≈ clears it) */
+  padding: 1px 0 1px 10px;
   min-height: 22px;
+  width: 100%;              /* ← fill the label column */
 }
 
 /* Fixed name width → everything after aligns */
 .st-name {
-  flex: 0 0 var(--st-name-width);
-  max-width: var(--st-name-width);
-  min-width: 0;
+  flex: 1 1 auto;        
+  min-width: 0;          
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: var(--fs-subtask); color: var(--text);
 }
+
 .subtask-done .st-name { text-decoration: line-through; color: var(--muted); }
 
 /* Fixed warning slot → clock aligns with/without warning */
