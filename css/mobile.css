@@ -314,12 +314,14 @@
     line-height: 1.1;
   }
 
+  /* color overlay — covers the ENTIRE row, above all content */
   .m-subtask::before {
     content: '';
     position: absolute;
     inset: 0;
-    z-index: 0;                 /* behind the sliding content */
+    z-index: 5;                   /* ← ABOVE text/icons/chips */
     opacity: 0;
+    pointer-events: none;
     background: var(--green);
   }
   .m-subtask.swiping-right::before {
@@ -331,48 +333,44 @@
     opacity: var(--swipe-strength, 0);
   }
 
-  /* the ICON, positioned in the gap that opens as the row slides */
+  /* the icon — above the overlay, in the opened gap */
   .m-subtask::after {
     position: absolute;
     top: 0; bottom: 0;
     width: 70px;
     display: flex; align-items: center; justify-content: center;
     font-size: 26px; color: var(--c-white);
-    z-index: 1;                 /* above the strip, below the sliding content */
+    z-index: 6;                   /* ← above the overlay */
     opacity: 0;
     pointer-events: none;
   }
-  /* right swipe → gap opens on the LEFT → ✓ there */
   .m-subtask.swiping-right::after {
     content: '✓';
     left: 0;
     opacity: var(--swipe-strength, 0);
   }
-  /* left swipe → gap opens on the RIGHT → 🏓 there */
   .m-subtask.swiping-left::after {
     content: '🏓';
-    right: 0;
+    right: 0; left: auto;
     opacity: var(--swipe-strength, 0);
   }
 
-  /* the SLIDING content — must be opaque so it fully hides the strip under it */
+  /* sliding content — NO background override (that caused the boxes) */
   .m-subtask > .m-sub-label,
   .m-subtask > .m-sub-right {
     position: relative;
-    z-index: 2;                 /* above strip + icon */
+    z-index: 1;                   /* below the overlay now */
     transform: translateX(var(--swipe-x, 0));
+    /* ← background REMOVED */
   }
 
-  /* smooth snap-back on release */
+  /* smooth snap-back */
   .m-subtask.swipe-animating > .m-sub-label,
   .m-subtask.swipe-animating > .m-sub-right {
     transition: transform 0.2s ease;
   }
-  .m-subtask.swipe-animating::before { transition: opacity 0.2s ease; }
-  .m-subtask.swipe-animating::after  { transition: opacity 0.2s ease; }
-
-  .m-subtask > .m-sub-label,
-  .m-subtask > .m-sub-right {
-    background: color-mix(in srgb, var(--task-color) 4%, var(--panel));  /* match row */
+  .m-subtask.swipe-animating::before,
+  .m-subtask.swipe-animating::after {
+    transition: opacity 0.2s ease;
   }
 }
