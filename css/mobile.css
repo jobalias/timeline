@@ -47,6 +47,8 @@
 
   /* subtask rows */
   .m-subtask {
+    position: relative;
+    overflow: hidden; 
     display: flex; align-items: center; justify-content: space-between;
     gap: 6px;
     padding: 8px 12px 8px 7px;
@@ -310,5 +312,45 @@
     padding: 2px 1px;
     white-space: normal;      /* allow wrap instead of overlap */
     line-height: 1.1;
+  }
+
+  /* the two action reveals, behind the row content */
+  .m-subtask::before,
+  .m-subtask::after {
+    position: absolute;
+    top: 0; bottom: 0;
+    display: flex; align-items: center;
+    font-size: 14px; font-weight: 700; color: var(--c-white);
+    padding: 0 16px;
+    opacity: 0;
+    transition: opacity 0.1s;
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* right-swipe (complete) reveal — green, enters from left */
+  .m-subtask::before {
+    content: "✓ Done";
+    left: 0;
+    background: var(--green);
+    justify-content: flex-start;
+  }
+  /* left-swipe (waiting) reveal — amber, enters from right */
+  .m-subtask::after {
+    content: "🏓 Waiting";
+    right: 0;
+    background: var(--c-orange, #d49a5a);
+    justify-content: flex-end;
+  }
+
+  /* show the relevant reveal while swiping (classes toggled in JS) */
+  .m-subtask.swiping-right::before { opacity: 1; }
+  .m-subtask.swiping-left::after   { opacity: 1; }
+
+  /* row content sits above the reveals */
+  .m-subtask > .m-sub-label,
+  .m-subtask > .m-sub-right {
+    position: relative;
+    z-index: 1;
+    background: inherit;    /* so the row bg covers the reveal until swiped */
   }
 }

@@ -76,16 +76,28 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       const dx = t.clientX - this._swipe.startX;
       const dy = t.clientY - this._swipe.startY;
 
-      // vertical-dominant → it's a scroll, abandon the swipe
       if (Math.abs(dy) > SWIPE_MAX_OFF_AXIS && Math.abs(dy) > Math.abs(dx)) {
         this._swipe.row.style.transform = '';
+        this._swipe.row.classList.remove('swiping-left', 'swiping-right');  // ← clear
         this._swipe = null;
         return;
       }
 
-      // horizontal-dominant → follow the finger a bit (visual feedback)
       if (Math.abs(dx) > Math.abs(dy)) {
-        this._swipe.row.style.transform = `translateX(${Math.max(-80, Math.min(80, dx))}px)`;
+        const clamped = Math.max(-80, Math.min(80, dx));
+        this._swipe.row.style.transform = `translateX(${clamped}px)`;
+
+        // ← toggle reveal based on direction + past a small reveal threshold
+        const row = this._swipe.row;
+        if (dx > 15) {
+          row.classList.add('swiping-right');
+          row.classList.remove('swiping-left');
+        } else if (dx < -15) {
+          row.classList.add('swiping-left');
+          row.classList.remove('swiping-right');
+        } else {
+          row.classList.remove('swiping-left', 'swiping-right');
+        }
       }
     }, { passive: true });
 
@@ -94,7 +106,7 @@ constructor(store, { onEditTask, onDeleteTask, onSchedule, onToggleDone,
       this._swipe = null;
       if (!s) return;
 
-      // snap the row back
+      s.row.classList.remove('swiping-left', 'swiping-right');   // ← clear reveal
       s.row.style.transition = 'transform 0.15s ease';
       s.row.style.transform = '';
       setTimeout(() => { s.row.style.transition = ''; }, 160);
