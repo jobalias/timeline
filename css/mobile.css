@@ -48,7 +48,7 @@
   /* subtask rows */
   .m-subtask {
     position: relative;
-    overflow: hidden; 
+    overflow: hidden;
     display: flex; align-items: center; justify-content: space-between;
     gap: 6px;
     padding: 8px 12px 8px 7px;
@@ -314,43 +314,65 @@
     line-height: 1.1;
   }
 
-  /* the two action reveals, behind the row content */
-  .m-subtask::before,
+  .m-subtask::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;                 /* behind the sliding content */
+    opacity: 0;
+    background: var(--green);
+  }
+  .m-subtask.swiping-right::before {
+    background: var(--green);
+    opacity: var(--swipe-strength, 0);
+  }
+  .m-subtask.swiping-left::before {
+    background: var(--c-yellow, #e0b64a);
+    opacity: var(--swipe-strength, 0);
+  }
+
+  /* the ICON, positioned in the gap that opens as the row slides */
   .m-subtask::after {
     position: absolute;
     top: 0; bottom: 0;
-    display: flex; align-items: center;
-    font-size: 14px; font-weight: 700; color: var(--c-white);
-    padding: 0 16px;
+    width: 70px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; color: var(--c-white);
+    z-index: 1;                 /* above the strip, below the sliding content */
     opacity: 0;
-    transition: opacity 0.1s;
     pointer-events: none;
-    z-index: 0;
   }
-  /* right-swipe (complete) reveal — green, enters from left */
-  .m-subtask::before {
-    content: "✓ Done";
+  /* right swipe → gap opens on the LEFT → ✓ there */
+  .m-subtask.swiping-right::after {
+    content: '✓';
     left: 0;
-    background: var(--green);
-    justify-content: flex-start;
+    opacity: var(--swipe-strength, 0);
   }
-  /* left-swipe (waiting) reveal — amber, enters from right */
-  .m-subtask::after {
-    content: "🏓 Waiting";
+  /* left swipe → gap opens on the RIGHT → 🏓 there */
+  .m-subtask.swiping-left::after {
+    content: '🏓';
     right: 0;
-    background: var(--c-orange, #d49a5a);
-    justify-content: flex-end;
+    opacity: var(--swipe-strength, 0);
   }
 
-  /* show the relevant reveal while swiping (classes toggled in JS) */
-  .m-subtask.swiping-right::before { opacity: 1; }
-  .m-subtask.swiping-left::after   { opacity: 1; }
-
-  /* row content sits above the reveals */
+  /* the SLIDING content — must be opaque so it fully hides the strip under it */
   .m-subtask > .m-sub-label,
   .m-subtask > .m-sub-right {
     position: relative;
-    z-index: 1;
-    background: inherit;    /* so the row bg covers the reveal until swiped */
+    z-index: 2;                 /* above strip + icon */
+    transform: translateX(var(--swipe-x, 0));
+  }
+
+  /* smooth snap-back on release */
+  .m-subtask.swipe-animating > .m-sub-label,
+  .m-subtask.swipe-animating > .m-sub-right {
+    transition: transform 0.2s ease;
+  }
+  .m-subtask.swipe-animating::before { transition: opacity 0.2s ease; }
+  .m-subtask.swipe-animating::after  { transition: opacity 0.2s ease; }
+
+  .m-subtask > .m-sub-label,
+  .m-subtask > .m-sub-right {
+    background: color-mix(in srgb, var(--task-color) 4%, var(--panel));  /* match row */
   }
 }

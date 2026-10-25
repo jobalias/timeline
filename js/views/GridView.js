@@ -121,15 +121,16 @@ export class GridView {
   //  swipe right → toggle complete;  swipe left → toggle waiting;  tap → note
   _bindMobileSwipe() {
     this._swipe = null;
-    const SWIPE_THRESHOLD = 60;    // px horizontal travel to trigger
-    const SWIPE_MAX_OFF_AXIS = 30; // max vertical drift to still count as horizontal
-    const REVEAL_AT = 15;          // px before the colored reveal shows
+    const SWIPE_THRESHOLD = 60;
+    const SWIPE_MAX_OFF_AXIS = 30;
+    const MAX_SLIDE = 80;          // max px the row slides
+    const FULL_OPACITY_AT = 80;    // px of drag where overlay/icon reach full
 
     this.wrap.addEventListener('touchstart', (e) => {
       if (!this.isMobile) return;
       const row = e.target.closest('.m-subtask');
       if (!row) { this._swipe = null; return; }
-      if (e.target.closest('.sched-btn')) { this._swipe = null; return; } // don't swipe on the clock
+      if (e.target.closest('.sched-btn')) { this._swipe = null; return; }
 
       const t = e.touches[0];
       this._swipe = {
@@ -147,29 +148,23 @@ export class GridView {
       const t = e.touches[0];
       const dx = t.clientX - this._swipe.startX;
       const dy = t.clientY - this._swipe.startY;
+      const row = this._swipe.row;
 
-      // vertical-dominant → it's a scroll, abandon the swipe
       if (Math.abs(dy) > SWIPE_MAX_OFF_AXIS && Math.abs(dy) > Math.abs(dx)) {
-        this._resetSwipeRow(this._swipe.row);
+        this._resetSwipeRow(row);
         this._swipe = null;
         return;
       }
+      if (Math.abs(dx) <= Math.abs(dy)) return;
 
-      // horizontal-dominant → follow the finger + reveal the action color
-      if (Math.abs(dx) > Math.abs(dy)) {
-        const row = this._swipe.row;
-        row.style.transform = `translateX(${Math.max(-80, Math.min(80, dx))}px)`;
+      const strength = Math.min(1, Math.abs(dx) / FULL_OPACITY_AT);
+      const slide = Math.max(-MAX_SLIDE, Math.min(MAX_SLIDE, dx));
 
-        if (dx > REVEAL_AT) {
-          row.classList.add('swiping-right');
-          row.classList.remove('swiping-left');
-        } else if (dx < -REVEAL_AT) {
-          row.classList.add('swiping-left');
-          row.classList.remove('swiping-right');
-        } else {
-          row.classList.remove('swiping-left', 'swiping-right');
-        }
-      }
+      // slide the inner content; drive overlay/icon opacity
+      row.classList.toggle('swiping-right', dx > 0);
+      row.classList.toggle('swiping-left', dx < 0);
+      row.style.setProperty('--swipe-x', `${slide}px`);
+      row.style.setProperty('--swipe-strength', strength.toFixed(3));
     }, { passive: true });
 
     this.wrap.addEventListener('touchend', (e) => {
@@ -177,30 +172,30 @@ export class GridView {
       this._swipe = null;
       if (!s) return;
 
-      // snap back + clear reveal
-      s.row.style.transition = 'transform 0.15s ease';
-      this._resetSwipeRow(s.row);
-      setTimeout(() => { s.row.style.transition = ''; }, 160);
+      this._resetSwipeRow(s.row);  // animates slide back + fades overlay
 
       const t = (e.changedTouches && e.changedTouches[0]) || null;
       if (!t) return;
       const dx = t.clientX - s.startX;
       const dy = t.clientY - s.startY;
 
-      if (Math.abs(dx) < SWIPE_THRESHOLD) return;  // too small → tap (note opens via click)
-      if (Math.abs(dy) > Math.abs(dx)) return;     // too vertical → ignore
+      if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+      if (Math.abs(dy) > Math.abs(dx)) return;
 
-      if (dx > 0) {
-        this.onToggleDone(s.taskId, s.subIndex, !s.done);  // swipe right → toggle complete
-      } else {
-        this.onToggleWaiting(s.taskId, s.subIndex);         // swipe left → toggle waiting
-      }
+      if (dx > 0) this.onToggleDone(s.taskId, s.subIndex, !s.done);
+      else        this.onToggleWaiting(s.taskId, s.subIndex);
     }, { passive: true });
   }
 
   _resetSwipeRow(row) {
-    row.style.transform = '';
-    row.classList.remove('swiping-left', 'swiping-right');
+    row.classList.add('swipe-animating');          // enable transition for snap-back
+    row.style.setProperty('--swipe-x', '0px');
+    row.style.setProperty('--swipe-strength', '0');
+    setTimeout(() => {
+      row.classList.remove('swiping-left', 'swiping-right', 'swipe-animating');
+      row.style.removeProperty('--swipe-x');
+      row.style.removeProperty('--swipe-strength');
+    }, 200);
   }
 
   // ----- Checkbox change (desktop complete/un-complete) -----
