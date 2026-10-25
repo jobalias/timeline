@@ -417,27 +417,41 @@ export class GridView {
       : (st.remainingHours > 0 ? 'sched-btn clock-pending' : 'sched-btn clock-full');
     const clockDisabled = st.done ? 'disabled' : '';
 
-    const dueBadge = `<span class="due-today-badge">${dueToday ? '⚠️' : ''}</span>`;
     const noteBadge = (st.note && st.note.trim())
       ? '<span class="note-dot" title="Has a note"></span>' : '';
 
-    const ballBtn = `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
-      title="${waiting ? 'Ball in their court — click to restore' : 'Waiting on someone? Click to minimize'}">
-      ${waiting ? '🏓' : '🏐'}</button>`;
+    // --- leading slot: checkbox (normal) or spacer (waiting) ---
+    const leadSlot = waiting
+      ? '<span class="check-spacer"></span>'
+      : `<input type="checkbox" class="done-check"
+           data-task-id="${task.id}" data-sub-index="${si}" ${st.done ? 'checked' : ''}>`;
+
+    // --- clock slot: ⏰ (normal) or 🏓 in the clock's position (waiting) ---
+    const clockSlot = waiting
+      ? `<button class="ball-dot ball-waiting" data-task-id="${task.id}"
+           data-sub-index="${si}" title="Ball in their court — click to restore">🏓</button>`
+      : `<button class="${clockCls}" data-task-id="${task.id}"
+           data-sub-index="${si}" ${clockDisabled}>⏰</button>`;
+
+    // --- trailing slot: 🏐 ball (normal) or spacer (waiting, so 🏓 aligns with ⏰) ---
+    const trailSlot = waiting
+      ? '<span class="ball-spacer"></span>'
+      : `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
+           title="Waiting on someone? Click to minimize">🏐</button>`;
 
     let html = `<tr class="subtask-tr" style="--task-color:${task.color};">
-        <td class="label-col ${rowCls}">
-          ${noteBadge}
-          <div class="st-row">
-            ${waiting ? '' : `<input type="checkbox" class="done-check"
-              data-task-id="${task.id}" data-sub-index="${si}" ${st.done ? 'checked' : ''}>`}
-            <span class="st-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
-            ${waiting ? '' : dueBadge}
-            ${waiting ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
-              data-sub-index="${si}" ${clockDisabled}>⏰</button>`}
-            ${ballBtn}
-          </div>
-        </td>`;
+      <td class="label-col ${rowCls}">
+        ${noteBadge}
+        <div class="st-row">
+          <span class="st-lead">${leadSlot}</span>
+          <span class="st-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
+          <span class="st-controls">
+            <span class="due-today-badge">${!waiting && dueToday ? '⚠️' : ''}</span>
+            ${clockSlot}
+            ${trailSlot}
+          </span>
+        </div>
+      </td>`;
     html += this._renderSubtaskCells(st, days, today, task.color);
     html += '</tr>';
     return html;

@@ -1,59 +1,49 @@
 /* ===== GRID VIEW (compact) ===== */
+
+/* ---- Label column width control (single source of truth) ---- */
+:root {
+  --label-max: 320px;   /* cap: names longer than this truncate */
+  --label-min: 180px;   /* floor: column never narrower than this */
+}
+
 .grid-wrap {
   overflow: auto;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--gap-sm);
-  padding-left: 0;              /* ← no left padding, so sticky col is flush */
+  padding-left: 0;
   max-height: var(--grid-max-height);
 }
 .grid-wrap td:not(.label-col),
 .grid-wrap th:not(.label-col) { contain: layout style; }
 
-.main-split .grid-wrap {
-  flex: 2 1 0;
-  min-width: 0;
-  overflow: auto;
-}
+.main-split .grid-wrap { flex: 2 1 0; min-width: 0; overflow: auto; }
 
 .grid-col {
-  flex: 2 1 0;
-  min-width: 0;
-  position: relative;      /* ← anchor for the overlay */
-  display: flex;
-  flex-direction: column;
+  flex: 2 1 0; min-width: 0; position: relative;
+  display: flex; flex-direction: column;
 }
+.main-split .grid-col .grid-wrap { flex: 1 1 auto; min-width: 0; }
 
-.main-split .grid-col .grid-wrap {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-table {
-  border-collapse: collapse;
-  width: max-content;   /* table = sum of all column widths → scrolls in grid-wrap */
-}
+table { border-collapse: collapse; width: max-content; }
 th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 
+/* ---- Label column: dynamic between min and max ---- */
 .label-col {
-  text-align: left; padding: 4px 12px;
+  text-align: left;
+  padding: 4px 12px;
   position: sticky; left: 0;
   background: var(--panel);
   z-index: 2;
-  width: var(--grid-label-width, 300px);
-  min-width: var(--grid-label-width, 300px);
-  max-width: var(--grid-label-width, 300px);
+  min-width: var(--label-min);
+  max-width: var(--label-max);
   border-right: 1px solid var(--border);
 }
 
-/* ===== Row tinting + spine (via .task-tr / .subtask-tr on <tr>) ===== */
-
-/* Spine via inset shadow — stays locked to the sticky label column during scroll */
+/* ===== Row tinting + spine ===== */
 .task-tr .label-col,
-.subtask-tr .label-col {
-  box-shadow: inset 3px 0 0 0 var(--task-color);
-}
+.subtask-tr .label-col { box-shadow: inset 3px 0 0 0 var(--task-color); }
 
 .task-tr .label-col {
   background: color-mix(in srgb, var(--task-color) 12%, var(--panel));
@@ -63,28 +53,34 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   background: color-mix(in srgb, var(--task-color) 7%, var(--panel));
   padding: 0;
 }
-.task-tr .cell {
-  background: color-mix(in srgb, var(--task-color) 6%, var(--panel));
-}
-.subtask-tr .cell {
-  background: color-mix(in srgb, var(--task-color) 4%, var(--panel));
-}
-.cell.weekend {
-  background: color-mix(in srgb, var(--task-color) 5%, var(--weekend-bg));
-}
+.task-tr .cell { background: color-mix(in srgb, var(--task-color) 6%, var(--panel)); }
+.subtask-tr .cell { background: color-mix(in srgb, var(--task-color) 4%, var(--panel)); }
+.cell.weekend { background: color-mix(in srgb, var(--task-color) 5%, var(--weekend-bg)); }
 
-/* Continuous horizontal lines across every row */
+/* Continuous horizontal lines */
 .task-tr .label-col, .task-tr .cell,
 .subtask-tr .label-col, .subtask-tr .cell {
   border-bottom: 1px solid var(--cell-border);
 }
 
+/* ===== Task header row ===== */
 .task-name {
   font-weight: 700; font-size: var(--fs-body);
-  display: flex; align-items: center; justify-content: space-between; gap: var(--gap-sm);
+  display: flex; align-items: center; gap: var(--gap-sm);
 }
-.task-btns { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
-.task-name:hover .task-btns { opacity: 1; }   /* hide edit/delete until hover */
+.task-title {
+  flex: 1 1 auto;
+  min-width: 0;                  /* allow shrink → ellipsis works */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-btns {
+  display: flex; gap: 2px; flex-shrink: 0;
+  opacity: 0; transition: opacity 0.15s;
+  margin-left: auto;             /* push buttons to the right edge */
+}
+.task-name:hover .task-btns { opacity: 1; }
 .task-edit, .task-del {
   padding: 1px 5px; font-size: 11px; border-radius: 5px; line-height: 1;
   border: none; background: transparent;
@@ -92,59 +88,69 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 .task-edit:hover { background: var(--neutral-bg); }
 .task-del:hover { background: var(--del-hover-bg); }
 .task-done .task-title { color: var(--muted); font-style: italic; }
-.task-title {
-  flex: 1 1 auto;
-  min-width: 0;                    /* allow it to shrink/truncate */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-/* Subtask row — single compact line */
+/* ===== Subtask row ===== */
 .subtask-name { padding: 0; }
 .st-row {
   display: flex; align-items: center; gap: 5px;
-  padding: 1px 0 1px 10px;
-  min-height: 22px;
-  width: 100%;              /* ← fill the label column */
+  padding: 1px 0 1px 10px; min-height: 22px;
 }
 
-/* Fixed name width → everything after aligns */
 .st-name {
-  flex: 1 1 auto;        
-  min-width: 0;          
+  flex: 1 1 auto; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: var(--fs-subtask); color: var(--text);
 }
-
+.st-controls {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 5px;
+  margin-left: auto;        /* pin cluster right */
+}
+.st-lead {
+  flex: 0 0 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.st-lead .done-check { margin: 0; width: 15px; height: 15px; }
 .subtask-done .st-name { text-decoration: line-through; color: var(--muted); }
 
-/* Fixed warning slot → clock aligns with/without warning */
 .due-today-badge {
   flex: 0 0 16px; width: 16px; text-align: center;
   font-size: 12px; line-height: 1;
 }
 .ball-dot, .sched-btn { flex-shrink: 0; }
 
-.done-check { width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; accent-color: var(--green); }
+.done-check {
+  width: 15px; height: 15px; cursor: pointer;
+  flex-shrink: 0; accent-color: var(--green);
+}
 
-/* Ball toggle — hidden until row hover */
 .ball-dot {
   background: transparent; border: none; font-size: 11px; line-height: 1;
   cursor: pointer; padding: 1px; border-radius: 5px;
   opacity: 0; transition: opacity 0.15s; flex-shrink: 0;
 }
+
+.check-spacer { width: 15px; height: 15px; display: block; }
+
 .st-row:hover .ball-dot { opacity: 0.5; }
 .ball-dot:hover { opacity: 1 !important; background: var(--hover-row); }
-
+.ball-dot.ball-waiting { opacity: 1; }   
 /* Note indicator */
 .note-dot { position: absolute; top: 3px; left: 6px; font-size: 9px; pointer-events: none; }
 .note-dot::before { content: var(--icon-note); }
-
+.ball-spacer {
+  flex: 0 0 auto;
+  width: 15px;   /* ≈ ball-dot width (font 11px + padding 1px*2) — measure & match */
+}
 /* Clock button */
 .sched-btn {
   padding: 1px 5px; font-size: 11px; border-radius: 5px; flex-shrink: 0;
   border: 1px solid transparent; line-height: 1.4;
+}
+.sched-spacer {
+  flex-shrink: 0;
+  /* match the clock button's total width: padding(1px 5px) + font + border */
+  width: 1px;    /* tune to match your ⏰ button width */
 }
 .clock-pending { background: var(--clock-pending-bg); border-color: transparent; }
 .clock-pending:hover { background: var(--clock-pending-hover); }
@@ -152,12 +158,10 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 .clock-done { background: transparent; opacity: 0.3; }
 
 /* Due-today */
-.subtask-name.due-today {
-  background: var(--panel);     /* ← opaque, not transparent */
-}
+.subtask-name.due-today { background: var(--panel); }
 .subtask-name.due-today .st-name { font-weight: 600; color: var(--danger); }
 
-/* Day header + cells — tighter */
+/* ===== Day header + cells ===== */
 .day-head { padding: 3px 2px; min-width: var(--grid-cell-size); color: var(--muted); font-weight: 500; }
 .dow { font-size: var(--fs-tiny); display: block; color: var(--muted); }
 
@@ -165,9 +169,7 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   width: var(--grid-cell-size); height: 22px;
   border: 1px solid var(--cell-border); position: relative;
 }
-
 .cell.today { box-shadow: inset 0 0 0 2px var(--today); }
-
 .cell .square { position: absolute; inset: 6px; border-radius: 4px; }
 .cell.due .square { background: transparent; display: flex; align-items: center; justify-content: center; }
 .cell.due .square::after { content: "✕"; color: var(--danger); font-weight: 700; font-size: 15px; }
@@ -179,7 +181,7 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 }
 .cell-done .hours-centered { color: var(--muted); opacity: 0.5; }
 
-/* Sticky headers */
+/* ===== Sticky headers ===== */
 .month-head {
   padding: 5px 4px; font-size: var(--fs-small); font-weight: 700; color: var(--muted);
   background: var(--panel); border-left: 1px solid var(--border);
@@ -193,79 +195,33 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 .grid-wrap .day-head.today   { background: var(--today); color: var(--c-black); border-radius: 5px; }
 .grid-wrap thead .label-col  { position: sticky; left: 0; top: 30px; z-index: 6; background: var(--panel); }
 
+/* ===== Grid nav ===== */
 .grid-nav { display: flex; gap: var(--gap-sm); align-items: center; margin-bottom: var(--gap-md); }
 .grid-nav button { font-size: 13px; padding: 6px 14px; border-radius: var(--radius); }
 #gridToday { font-weight: 600; }
 
 @media (max-width: 600px) {
-  .label-col { min-width: var(--grid-label-width-mobile); }
+  .label-col { min-width: var(--grid-label-width-mobile); max-width: none; }
   .day-head { min-width: var(--grid-cell-size-mobile); }
   .cell { width: var(--grid-cell-size-mobile); height: var(--grid-cell-size-mobile); }
-  .st-name { max-width: 90px; }
 }
+
 /* ===== Toolbar ===== */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.tb-group { display: flex; gap: 6px; }
+.toolbar #addTaskBtn { margin-left: 8px; }
+.toolbar .grid-nav-bar { display: flex; margin-left: auto; margin-right: auto; margin-bottom: 0; }
+.toolbar .grid-nav { margin-bottom: 0; }
+.toolbar .grid-nav button { padding: 9px 14px; }
+.tb-right { display: flex; align-items: center; gap: 12px; }
 
-.tb-group {
-  display: flex;
-  gap: 6px;
-}
-
-.toolbar #addTaskBtn {
-  margin-left: 8px;
-}
-
-/* nav wrapper is the direct flex child → center IT */
-.toolbar .grid-nav-bar {
-  display: flex;
-  margin-left: auto;
-  margin-right: auto;
-  margin-bottom: 0;          /* kill leftover standalone-bar margin */
-}
-
-/* match nav button height to Add Task so they're vertically level */
-.toolbar .grid-nav {
-  margin-bottom: 0;          /* override the general .grid-nav rule */
-}
-.toolbar .grid-nav button {
-  padding: 9px 14px;
-}
-
-.tb-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-
-/* "Show completed" overlays the grid's top-right corner,
-   positioned by % / edge offsets → moves with the grid on resize */
+/* "Show completed" */
 .show-completed-mini {
-  position: absolute;
-  top: 10px;
-  left: 16px;             /* anchored to the LEFT edge of the grid → reflows on resize */
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0;
-  font-size: 11px;
-  color: var(--muted);
-  background: var(--panel);
-  padding: 3px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
+  position: absolute; top: 10px; left: 16px; z-index: 8;
+  display: flex; align-items: center; gap: 5px; margin: 0;
+  font-size: 11px; color: var(--muted);
+  background: var(--panel); padding: 3px 8px; border-radius: 6px;
+  cursor: pointer; white-space: nowrap;
   box-shadow: 0 1px 3px var(--c-shadow-10);
 }
-.show-completed-mini input {
-  width: 13px;
-  height: 13px;
-  accent-color: var(--accent);
-  margin: 0;
-}
+.show-completed-mini input { width: 13px; height: 13px; accent-color: var(--accent); margin: 0; }
