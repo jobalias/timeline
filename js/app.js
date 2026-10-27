@@ -415,6 +415,7 @@ async _handleDeleteTask(id) {
     this.grid.render();
     this.grid.onShow();
     this.dayView.render();
+    this.dayView.startNowLineTimer(); 
   }
 
   _showLogin() {
@@ -600,11 +601,13 @@ async _handleDeleteTask(id) {
       [gridC, planC, progC].forEach((c) => (c.style.display = 'none'));
       this.plannerView.deactivate();
       this.progressView.deactivate();
+      this.dayView.stopNowLineTimer(); 
       this.activeView = which;
       if (which === 'grid') {
         tabGrid.classList.add('active'); gridC.style.display = 'block';
         this.grid.render();
         this.grid.onShow(); 
+        this.dayView.startNowLineTimer();
       } else if (which === 'planner') {
         tabPlanner.classList.add('active'); planC.style.display = 'block';
         this.plannerView.activate();

@@ -43,3 +43,24 @@
   .main-split { flex-direction: column; }
   .day-view { height: 50vh; min-width: 0; }
 }
+
+/* red "now" line on the day view */
+.dv-now-line {
+  position: absolute;
+  left: 54px;            /* align with blocks (which start at left:54px) */
+  right: 8px;
+  height: 2px;
+  background: var(--danger);
+  z-index: 6;            /* above blocks/busy, below nothing important */
+  pointer-events: none;
+}
+.dv-now-line::before {   /* the dot at the left, like Google Calendar */
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+}

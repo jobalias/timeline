@@ -111,9 +111,52 @@ export class DayView {
                </div>`;
     });
 
+    if (sameDay(this.currentDay, startOfDay(new Date()))) {
+      const now = new Date();
+      const nowTop = (now.getHours() + now.getMinutes() / 60) * HOUR_PX;
+      html += `<div class="dv-now-line" style="top:${nowTop}px;"></div>`;
+    }
+
     html += '</div>';
     this.bodyEl.innerHTML = html;
     this.bodyEl.scrollTop = 8 * HOUR_PX;
+  }
+
+  _updateNowLine() {
+    const line = this.bodyEl.querySelector('.dv-now-line');
+    const isToday = sameDay(this.currentDay, startOfDay(new Date()));
+
+    if (!isToday) {
+      if (line) line.remove();   // moved off today → remove any stale line
+      return;
+    }
+
+    const HOUR_PX = cssVar('--dayview-hour-px', 44);
+    const now = new Date();
+    const top = (now.getHours() + now.getMinutes() / 60) * HOUR_PX;
+
+    if (line) {
+      line.style.top = `${top}px`;
+    } else {
+      // today but no line yet (e.g. navigated back to today) → add one
+      const el = document.createElement('div');
+      el.className = 'dv-now-line';
+      el.style.top = `${top}px`;
+      const grid = this.bodyEl.querySelector('.dv-grid');
+      if (grid) grid.appendChild(el);
+    }
+  }
+
+  startNowLineTimer() {
+    this.stopNowLineTimer();   // avoid duplicates
+    this._nowTimer = setInterval(() => this._updateNowLine(), 60000);
+  }
+
+  stopNowLineTimer() {
+    if (this._nowTimer) {
+      clearInterval(this._nowTimer);
+      this._nowTimer = null;
+    }
   }
 
   _fmtHour(h) {
