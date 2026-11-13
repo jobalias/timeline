@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="css/modals.css">
   <link rel="stylesheet" href="css/mobile.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/whiteboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -44,6 +45,7 @@
       <button class="view-tab active" id="tabGrid">📊 Grid</button>
       <button class="view-tab" id="tabPlanner">🗓️ Planner</button>
       <button class="view-tab" id="tabProgress">🌱 Progress</button>
+      <button class="view-tab" id="tabWhiteboard">📝 Whiteboard</button>
     </div>
 
     <!-- ===== GRID VIEW ===== -->
@@ -159,6 +161,29 @@
       <div class="progress-week" id="progressWeek"></div>
     </div>
 
+  <!-- ===== WHITEBOARD VIEW ===== -->
+    <div id="whiteboardViewContainer" style="display:none;">
+      <div class="wb-toolbar">
+        <div class="wb-styles" role="group" aria-label="Line style">
+          <button class="wb-style-btn" data-kind="category" title="Category (⌘1)">Category</button>
+          <button class="wb-style-btn" data-kind="task" title="Task (⌘2)">Task</button>
+          <button class="wb-style-btn" data-kind="subtask" title="Subtask (⌘3)">Subtask</button>
+        </div>
+        <div class="wb-toolbar-right">
+          <label><input type="checkbox" id="wbHideAdded"> Hide added</label>
+          <button id="wbClearAdded">Clear added</button>
+        </div>
+      </div>
+      <div class="wb-hint">
+        <kbd>Enter</kbd> new line · <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> change level ·
+        start with <kbd>#</kbd> for a category, <kbd>-</kbd> for a subtask ·
+        <kbd>⌘Enter</kbd> or <b>Add →</b> to send a line to your tasks
+      </div>
+      <div class="wb-board">
+        <div id="wbList"></div>
+      </div>
+    </div>
+
   </div>
 
 
@@ -175,6 +200,18 @@
       <div class="modal-actions">
         <button id="taskCancelBtn">Cancel</button>
         <button class="primary" id="taskSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Whiteboard: pick a task for a subtask ============ -->
+  <div class="modal-backdrop" id="wbPickBackdrop">
+    <div class="modal" style="width:min(440px,92vw)">
+      <h2 id="wbPickTitle">Add to which task?</h2>
+      <input type="text" id="wbPickFilter" placeholder="Search tasks, or type a new task name…">
+      <div class="wb-pick-list" id="wbPickList"></div>
+      <div class="modal-actions">
+        <button id="wbPickCancel">Cancel</button>
       </div>
     </div>
   </div>

@@ -29,39 +29,69 @@ export class TaskModal {
     });
   }
 
-  openNew() {
+  // prefill (optional): { name, subtasks: [{ name }] } — used by the Whiteboard
+  openNew(prefill = null) {
     this.editingId = null;
+    this._afterSaveOnce = null;
     this._pendingEventDeletions = []; // ← reset
     this.title.textContent = 'Add Task';
-    this.nameInput.value = '';
+    this.nameInput.value = prefill?.name || '';
     this.subtaskList.innerHTML = '';
-    this._addSubtaskRow();
+    const pre = prefill?.subtasks || [];
+    pre.forEach((st) => this._addSubtaskRow({ name: st.name }));
+    if (pre.length === 0) this._addSubtaskRow();
     this.backdrop.classList.add('open');
 
     this.nameInput.classList.remove('input-error');
     document.getElementById('taskSaveBtn').disabled = false;
     this._clearNameNote();
+    if (prefill?.name) {
+      this._validateName();
+      this._focusFirstEmptyField();
+    }
   }
 
-  openEdit(id) {
+  // extraSubtasks (optional): [{ name }] appended as new rows — used by the Whiteboard
+  openEdit(id, { extraSubtasks = [] } = {}) {
     const t = this.store.find(id);
     if (!t) return;
     this.editingId = id;
+    this._afterSaveOnce = null;
     this._pendingEventDeletions = []; // ← reset
-    this.title.textContent = 'Edit Task';
+    this.title.textContent = extraSubtasks.length ? `Add to "${t.name}"` : 'Edit Task';
     this.nameInput.value = t.name;
     this.subtaskList.innerHTML = '';
     t.subtasks.forEach((st) => this._addSubtaskRow(st));
-    if (t.subtasks.length === 0) this._addSubtaskRow();
+    const firstNew = this.subtaskList.children.length;
+    extraSubtasks.forEach((st) => this._addSubtaskRow({ name: st.name }));
+    if (t.subtasks.length === 0 && extraSubtasks.length === 0) this._addSubtaskRow();
     this.backdrop.classList.add('open');
 
     this.nameInput.classList.remove('input-error');
     document.getElementById('taskSaveBtn').disabled = false;
     this._clearNameNote();
+
+    // bring the new rows into view and highlight them
+    if (extraSubtasks.length) {
+      const rows = [...this.subtaskList.children].slice(firstNew);
+      rows.forEach((r) => r.classList.add('subtask-row-new'));
+      rows[0].scrollIntoView({ block: 'center' });
+      this._focusFirstEmptyField(rows[0]);
+    }
+  }
+
+  // Run fn(savedId) once after the next successful save (cleared on cancel/reopen)
+  setAfterSaveOnce(fn) { this._afterSaveOnce = fn; }
+
+  _focusFirstEmptyField(scope = this.subtaskList) {
+    const el = [...scope.querySelectorAll('input[type=date], input[type=number]')]
+      .find((i) => !i.value);
+    if (el) setTimeout(() => el.focus(), 50);
   }
 
   close() {
     this.backdrop.classList.remove('open');
+    this._afterSaveOnce = null;
     this._pendingEventDeletions = []; // ← reset (don't delete if they cancelled)
   }
 
@@ -199,7 +229,11 @@ export class TaskModal {
     // execute any pending calendar-event deletions from removed subtasks
     await this._executePendingDeletions();
 
+    const afterOnce = this._afterSaveOnce;
     this.close();
+    if (afterOnce) {
+      try { afterOnce(savedId); } catch (e) { console.warn('afterSaveOnce failed', e); }
+    }
     this.onAfterSave(savedId, newSubtaskIndices);
   }
 

@@ -6,7 +6,8 @@ const STORAGE_KEY = 'taskGrid';
 export class TaskStore {
   constructor() {
     this.completionLog = []; 
-    this.calendarSyncEnabled = true;       
+    this.calendarSyncEnabled = true;
+    this.whiteboard = [];   // [{ id, kind: 'category'|'task'|'subtask', text, added }]
     this.tasks = this._loadLocal();
     this.listeners = [];
     this.used_colors = [];
@@ -159,6 +160,8 @@ export class TaskStore {
         taskArray = remote.tasks || []; 
         log = remote.completionLog || [];
         this.calendarSyncEnabled = remote.calendarSyncEnabled !== false;
+        // only overwrite the local whiteboard if Drive actually has one
+        if (Array.isArray(remote.whiteboard)) this.whiteboard = remote.whiteboard;
       } else {
         this._setStatus('synced'); return;
       }
@@ -188,6 +191,7 @@ export class TaskStore {
     if (Array.isArray(raw)) { this.completionLog = []; return raw.map((t) => new Task(t)); }
     this.completionLog = raw.completionLog || [];
     this.calendarSyncEnabled = raw.calendarSyncEnabled !== false;
+    this.whiteboard = Array.isArray(raw.whiteboard) ? raw.whiteboard : [];
     return (raw.tasks || []).map((t) => new Task(t));
   }
 
@@ -196,8 +200,14 @@ export class TaskStore {
       tasks: this.tasks.map((t) => t.toJSON()),
       completionLog: this.completionLog,
       calendarSyncEnabled: this.calendarSyncEnabled,
+      whiteboard: this.whiteboard,
     }));
   }
+
+  // ---------- whiteboard (quick-capture list) ----------
+  getWhiteboard() { return this.whiteboard; }
+  setWhiteboard(lines) { this.whiteboard = lines; this._save(); }
+  saveWhiteboard() { this._save(); }
 
   async _saveRemote() {
   // If a save is already running, mark that another is needed and bail.
@@ -220,6 +230,7 @@ export class TaskStore {
       tasks: this.tasks.map((t) => t.toJSON()),
       completionLog: this.completionLog,
       calendarSyncEnabled: this.calendarSyncEnabled,
+      whiteboard: this.whiteboard,
     });
 
     if (ok) {

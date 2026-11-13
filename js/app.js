@@ -11,6 +11,7 @@ import { Settings } from './services/Settings.js';
 import { CalendarPicker } from './views/CalendarPicker.js';
 import { PlannerView } from './views/PlannerView.js';
 import { ProgressView } from './views/ProgressView.js';
+import { WhiteboardView } from './views/WhiteboardView.js';
 import { escapeHtml } from './utils.js'; 
 import { Task } from './models/Task.js'; 
 
@@ -102,6 +103,8 @@ class App {
         this._startSchedulingSequence(taskId, newSubtaskIndices),
     });
 
+    this.whiteboardView = new WhiteboardView(this.store, this.taskModal);
+
     this.grid = new GridView(this.store, {
       onEditTask: (id) => this.taskModal.openEdit(id),
       onDeleteTask: (id) => this._handleDeleteTask(id),
@@ -141,6 +144,8 @@ class App {
         this.plannerView.refresh();
       } else if (view === 'progress') {
         this.progressView.refresh();
+      } else if (view === 'whiteboard') {
+        this.whiteboardView.onStoreChange();
       }
     });
 
@@ -592,15 +597,18 @@ async _handleDeleteTask(id) {
     const tabGrid = document.getElementById('tabGrid');
     const tabPlanner = document.getElementById('tabPlanner');
     const tabProgress = document.getElementById('tabProgress');
+    const tabWhiteboard = document.getElementById('tabWhiteboard');
     const gridC = document.getElementById('gridViewContainer');
     const planC = document.getElementById('plannerViewContainer');
     const progC = document.getElementById('progressViewContainer');
+    const wbC = document.getElementById('whiteboardViewContainer');
 
     const show = (which) => {
-      [tabGrid, tabPlanner, tabProgress].forEach((t) => t.classList.remove('active'));
-      [gridC, planC, progC].forEach((c) => (c.style.display = 'none'));
+      [tabGrid, tabPlanner, tabProgress, tabWhiteboard].forEach((t) => t.classList.remove('active'));
+      [gridC, planC, progC, wbC].forEach((c) => (c.style.display = 'none'));
       this.plannerView.deactivate();
       this.progressView.deactivate();
+      this.whiteboardView.deactivate();
       this.dayView.stopNowLineTimer(); 
       this.activeView = which;
       if (which === 'grid') {
@@ -611,6 +619,9 @@ async _handleDeleteTask(id) {
       } else if (which === 'planner') {
         tabPlanner.classList.add('active'); planC.style.display = 'block';
         this.plannerView.activate();
+      } else if (which === 'whiteboard') {
+        tabWhiteboard.classList.add('active'); wbC.style.display = 'block';
+        this.whiteboardView.activate();
       } else {
         tabProgress.classList.add('active'); progC.style.display = 'block';
         this.progressView.activate();
@@ -620,6 +631,7 @@ async _handleDeleteTask(id) {
     tabGrid.addEventListener('click', () => show('grid'));
     tabPlanner.addEventListener('click', () => show('planner'));
     tabProgress.addEventListener('click', () => show('progress'));
+    tabWhiteboard.addEventListener('click', () => show('whiteboard'));
 
     // reuse for plannerAddTask etc. if needed
     document.getElementById('plannerAddTaskBtn')
