@@ -38,7 +38,7 @@ export class TaskModal {
     this.nameInput.value = prefill?.name || '';
     this.subtaskList.innerHTML = '';
     const pre = prefill?.subtasks || [];
-    pre.forEach((st) => this._addSubtaskRow({ name: st.name }));
+    pre.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '' }));
     if (pre.length === 0) this._addSubtaskRow();
     this.backdrop.classList.add('open');
 
@@ -63,7 +63,7 @@ export class TaskModal {
     this.subtaskList.innerHTML = '';
     t.subtasks.forEach((st) => this._addSubtaskRow(st));
     const firstNew = this.subtaskList.children.length;
-    extraSubtasks.forEach((st) => this._addSubtaskRow({ name: st.name }));
+    extraSubtasks.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '' }));
     if (t.subtasks.length === 0 && extraSubtasks.length === 0) this._addSubtaskRow();
     this.backdrop.classList.add('open');
 

@@ -100,9 +100,44 @@
 .wb-line:hover .wb-del { opacity: 1; }
 .wb-del:hover { color: var(--danger); background: var(--del-hover-bg); transform: none; box-shadow: none; }
 
+/* ---- est. hours square (subtasks) ---- */
+.wb-hours {
+  flex: none; width: 34px !important; height: 26px; padding: 0 2px !important;
+  text-align: center; font-size: 12px; font-weight: 600; color: var(--accent-dark);
+  border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+  -moz-appearance: textfield; appearance: textfield;
+}
+.wb-hours::-webkit-outer-spin-button,
+.wb-hours::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.wb-hours::placeholder { color: var(--c-gray-400); font-weight: 400; }
+.wb-hours:placeholder-shown { border-style: dashed; }
+.wb-hours:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--app-block-bg); }
+.wb-line.is-added .wb-hours { color: var(--muted); }
+
+/* ---- drag & drop ---- */
+.wb-handle {
+  flex: none; width: 14px; margin-left: -6px;
+  font-size: 12px; letter-spacing: -3px; line-height: 1; text-align: center;
+  color: var(--c-gray-400); cursor: grab; user-select: none; touch-action: none;
+  opacity: 0; transition: opacity var(--transition);
+}
+.wb-line:hover .wb-handle { opacity: 1; }
+.wb-handle:hover { color: var(--text); }
+.wb-line.wb-dragging { opacity: 0.35; }
+body.wb-is-dragging, body.wb-is-dragging * { cursor: grabbing !important; user-select: none; }
+body.wb-is-dragging .wb-line:hover { background: transparent; }
+body.wb-is-dragging .wb-line.wb-dragging .wb-handle { opacity: 1; }
+
+.wb-drop-indicator {
+  height: 3px; margin: 2px 4px; border-radius: 3px; background: var(--accent);
+  box-shadow: 0 0 0 2px var(--app-block-bg);
+}
+.wb-drop-indicator.is-subtask { margin-left: 34px; }
+.wb-line.wb-drop-parent { background: var(--app-block-bg); }
+
 /* touch screens: no hover, so always show actions */
 @media (hover: none) {
-  .wb-add, .wb-del { opacity: 1; }
+  .wb-add, .wb-del, .wb-handle { opacity: 1; }
 }
 
 /* ---- task picker modal ---- */

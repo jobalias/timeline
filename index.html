@@ -42,14 +42,14 @@
     <h1>To Do List</h1>
 
     <div class="view-tabs">
-      <button class="view-tab active" id="tabGrid">📊 Grid</button>
+      <button class="view-tab active" id="tabWhiteboard">📝 Whiteboard</button>
+      <button class="view-tab" id="tabGrid">📊 Grid</button>
       <button class="view-tab" id="tabPlanner">🗓️ Planner</button>
       <button class="view-tab" id="tabProgress">🌱 Progress</button>
-      <button class="view-tab" id="tabWhiteboard">📝 Whiteboard</button>
     </div>
 
     <!-- ===== GRID VIEW ===== -->
-    <div id="gridViewContainer">
+    <div id="gridViewContainer" style="display:none;">
       <div class="toolbar">
         <!-- utility cluster, far left -->
         <div class="tb-group">
@@ -162,7 +162,7 @@
     </div>
 
   <!-- ===== WHITEBOARD VIEW ===== -->
-    <div id="whiteboardViewContainer" style="display:none;">
+    <div id="whiteboardViewContainer">
       <div class="wb-toolbar">
         <div class="wb-styles" role="group" aria-label="Line style">
           <button class="wb-style-btn" data-kind="category" title="Category (⌘1)">Category</button>
@@ -177,6 +177,7 @@
       <div class="wb-hint">
         <kbd>Enter</kbd> new line · <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> change level ·
         start with <kbd>#</kbd> for a category, <kbd>-</kbd> for a subtask ·
+        drag <b>⋮⋮</b> to move ·
         <kbd>⌘Enter</kbd> or <b>Add →</b> to send a line to your tasks
       </div>
       <div class="wb-board">

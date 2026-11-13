@@ -28,7 +28,7 @@ class App {
     this.noteModal = new NoteModal(this.store, {
           onSaved: (saved) => this._onNoteSaved(saved), // Chunk 2 syncs to calendar
         });
-    this.activeView = 'grid';
+    this.activeView = 'whiteboard';   // Whiteboard is the main/default tab
     // sync status → toolbar
     const syncEl = document.getElementById('syncStatus');
     // sync status → badge + warning banner
@@ -417,10 +417,7 @@ async _handleDeleteTask(id) {
   _showApp() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContainer').style.display = 'block';
-    this.grid.render();
-    this.grid.onShow();
-    this.dayView.render();
-    this.dayView.startNowLineTimer(); 
+    this._showView(this.activeView || 'whiteboard');
   }
 
   _showLogin() {
@@ -614,7 +611,8 @@ async _handleDeleteTask(id) {
       if (which === 'grid') {
         tabGrid.classList.add('active'); gridC.style.display = 'block';
         this.grid.render();
-        this.grid.onShow(); 
+        this.grid.onShow();
+        this.dayView.render();
         this.dayView.startNowLineTimer();
       } else if (which === 'planner') {
         tabPlanner.classList.add('active'); planC.style.display = 'block';
@@ -632,6 +630,7 @@ async _handleDeleteTask(id) {
     tabPlanner.addEventListener('click', () => show('planner'));
     tabProgress.addEventListener('click', () => show('progress'));
     tabWhiteboard.addEventListener('click', () => show('whiteboard'));
+    this._showView = show;
 
     // reuse for plannerAddTask etc. if needed
     document.getElementById('plannerAddTaskBtn')

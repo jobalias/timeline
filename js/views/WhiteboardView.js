@@ -32,6 +32,7 @@ export class WhiteboardView {
 
     this._bindToolbar();
     this._bindList();
+    this._bindDrag();
     this._bindPicker();
   }
 
@@ -41,7 +42,7 @@ export class WhiteboardView {
 
   // store changed (typing, Drive load, etc.) — don't yank focus while typing
   onStoreChange() {
-    if (!this.isActive) return;
+    if (!this.isActive || this._drag) return;
     if (this.listEl.contains(document.activeElement)) return;
     this.render();
   }
@@ -95,11 +96,20 @@ export class WhiteboardView {
       const action = !canAdd ? '' : l.added
         ? `<button class="wb-added" data-act="unadd" title="Added to your tasks — click to mark as not added">✓ Added</button>`
         : `<button class="wb-add" data-act="add" title="Add this to your tasks"${l.text.trim() ? '' : ' disabled'}>Add →</button>`;
+      const handle = canAdd
+        ? `<span class="wb-handle" title="Drag to move${l.kind === 'task' ? ' (brings its subtasks along)' : ' under a task'}" aria-hidden="true">⋮⋮</span>`
+        : '';
+      const hours = l.kind === 'subtask'
+        ? `<input class="wb-hours" type="number" min="0" step="0.5" inputmode="decimal"
+             value="${escapeHtml(l.hours ?? '')}" placeholder="h" title="Est. hours (optional)" aria-label="Estimated hours">`
+        : '';
       return `
         <div class="wb-line wb-${l.kind}${l.added ? ' is-added' : ''}" data-id="${l.id}">
+          ${handle}
           <span class="wb-bullet" aria-hidden="true"></span>
           <input class="wb-input" type="text" value="${escapeHtml(l.text)}"
             placeholder="${placeholders[l.kind]}" aria-label="${l.kind}">
+          ${hours}
           ${action}
           <button class="wb-del" data-act="del" title="Delete line" tabindex="-1">✕</button>
         </div>`;
@@ -190,6 +200,11 @@ export class WhiteboardView {
     });
 
     this.listEl.addEventListener('input', (e) => {
+      if (e.target.classList.contains('wb-hours')) {
+        const l = this._find(lineOf(e.target).dataset.id);
+        if (l) { l.hours = e.target.value; this._save(); }
+        return;
+      }
       if (!e.target.classList.contains('wb-input')) return;
       const row = lineOf(e.target);
       const l = this._find(row.dataset.id);
@@ -362,6 +377,98 @@ export class WhiteboardView {
     this._focus(parsed[parsed.length - 1].id);
   }
 
+  // ---------- drag & drop (pointer events → works with mouse and touch) ----------
+  // Dragging a subtask re-parents it under whichever task ends up above it.
+  // Dragging a task moves it together with its subtasks, and only drops
+  // between task blocks (so it can't split another task's subtasks).
+  _bindDrag() {
+    this.listEl.addEventListener('pointerdown', (e) => {
+      const handle = e.target.closest('.wb-handle');
+      if (!handle || e.button > 0) return;
+      e.preventDefault();
+      const row = handle.closest('.wb-line');
+      const line = this._find(row.dataset.id);
+      if (!line) return;
+
+      const ids = [line.id];
+      if (line.kind === 'task') this._children(line.id).forEach((c) => ids.push(c.id));
+      const dragRows = ids.map((id) => this.listEl.querySelector(`.wb-line[data-id="${id}"]`)).filter(Boolean);
+      dragRows.forEach((r) => r.classList.add('wb-dragging'));
+      document.activeElement?.blur?.();
+
+      const indicator = document.createElement('div');
+      indicator.className = 'wb-drop-indicator' + (line.kind === 'subtask' ? ' is-subtask' : '');
+
+      this._drag = { line, ids: new Set(ids), dragRows, indicator, beforeId: undefined, pointerId: e.pointerId };
+      handle.setPointerCapture?.(e.pointerId);
+      document.body.classList.add('wb-is-dragging');
+      this._dragMove(e.clientY);
+    });
+
+    this.listEl.addEventListener('pointermove', (e) => {
+      if (!this._drag || e.pointerId !== this._drag.pointerId) return;
+      e.preventDefault();
+      this._dragMove(e.clientY);
+      // auto-scroll near the top/bottom of the window
+      const edge = 60;
+      if (e.clientY < edge) window.scrollBy(0, -12);
+      else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
+    });
+
+    const end = (e, cancelled) => {
+      if (!this._drag || e.pointerId !== this._drag.pointerId) return;
+      const { ids, indicator, beforeId } = this._drag;
+      indicator.remove();
+      this.listEl.querySelectorAll('.wb-drop-parent').forEach((r) => r.classList.remove('wb-drop-parent'));
+      document.body.classList.remove('wb-is-dragging');
+      this._drag = null;
+      if (!cancelled && beforeId !== undefined) this._moveBlock([...ids], beforeId);
+      else this.render();
+    };
+    this.listEl.addEventListener('pointerup', (e) => end(e, false));
+    this.listEl.addEventListener('pointercancel', (e) => end(e, true));
+  }
+
+  _dragMove(y) {
+    const d = this._drag;
+    const rows = [...this.listEl.querySelectorAll('.wb-line')].filter((r) => !d.ids.has(r.dataset.id));
+    // a task block may only land before a task/category (or at the very end)
+    const candidates = d.line.kind === 'task'
+      ? rows.filter((r) => !r.classList.contains('wb-subtask'))
+      : rows;
+
+    const target = candidates.find((r) => {
+      const b = r.getBoundingClientRect();
+      return y < b.top + b.height / 2;
+    });
+
+    if (target) this.listEl.insertBefore(d.indicator, target);
+    else this.listEl.appendChild(d.indicator);
+    d.beforeId = target ? target.dataset.id : null;
+
+    // highlight the task the subtask would belong to
+    this.listEl.querySelectorAll('.wb-drop-parent').forEach((r) => r.classList.remove('wb-drop-parent'));
+    if (d.line.kind === 'subtask') {
+      let prev = d.indicator.previousElementSibling;
+      while (prev && (d.ids.has(prev.dataset.id) || prev.classList.contains('wb-subtask'))) {
+        prev = prev.previousElementSibling;
+      }
+      if (prev && prev.classList.contains('wb-task')) prev.classList.add('wb-drop-parent');
+    }
+  }
+
+  // move the given line ids (kept in order) to just before `beforeId` (null = end)
+  _moveBlock(ids, beforeId) {
+    const set = new Set(ids);
+    const moving = this.lines.filter((l) => set.has(l.id));
+    const rest = this.lines.filter((l) => !set.has(l.id));
+    let at = beforeId ? rest.findIndex((l) => l.id === beforeId) : rest.length;
+    if (at < 0) at = rest.length;
+    rest.splice(at, 0, ...moving);
+    this.store.setWhiteboard(rest);
+    this.render();
+  }
+
   // ---------- promoting to the real task list ----------
   _findStoreTask(name) {
     return this.store.getAll().find((t) => norm(t.name) === norm(name));
@@ -381,7 +488,7 @@ export class WhiteboardView {
   _addTask(line) {
     const name = line.text.trim();
     const children = this._children(line.id).filter((c) => !c.added && c.text.trim());
-    const subs = children.map((c) => ({ name: c.text.trim() }));
+    const subs = children.map((c) => ({ name: c.text.trim(), estHours: c.hours || '' }));
     const existing = this._findStoreTask(name);
 
     if (existing && this._isOngoing(existing)) {
@@ -493,14 +600,14 @@ export class WhiteboardView {
     const sub = this._find(this._pickSubId);
     this._closePicker();
     if (!sub) return;
-    const subName = sub.text.trim();
+    const subData = { name: sub.text.trim(), estHours: sub.hours || '' };
     const parent = this._parentTask(sub.id);
 
     if (mode === 'existing') {
-      this.taskModal.openEdit(value, { extraSubtasks: [{ name: subName }] });
+      this.taskModal.openEdit(value, { extraSubtasks: [subData] });
     } else {
       // a "new" name may still match a finished/empty task — TaskModal merges in that case
-      this.taskModal.openNew({ name: value, subtasks: [{ name: subName }] });
+      this.taskModal.openNew({ name: value, subtasks: [subData] });
     }
 
     this.taskModal.setAfterSaveOnce((savedId) => {
