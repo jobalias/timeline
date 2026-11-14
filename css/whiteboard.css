@@ -70,6 +70,30 @@
 .wb-subtask .wb-input { font-family: var(--font-main); font-weight: 400; font-size: 13.5px; color: var(--c-gray-700); }
 .wb-subtask .wb-bullet { width: 10px; height: 2px; flex: none; background: var(--c-gray-400); border-radius: 2px; }
 
+/* ---- tree guides: show which task a subtask belongs to ---- */
+.wb-line { --tree-x: 26px; --tree-c: var(--c-gray-350); }   /* x = centre of the task bullet */
+.wb-task.has-children::after {            /* stem dropping from the task bullet */
+  content: ''; position: absolute; left: calc(var(--tree-x) - 1px);
+  top: calc(50% + 6px); bottom: 0; width: 2px; background: var(--tree-c);
+  pointer-events: none;
+}
+.wb-subtask.has-parent::before,           /* vertical line through the group */
+.wb-subtask.has-parent::after {           /* elbow into the subtask */
+  content: ''; position: absolute; background: var(--tree-c); pointer-events: none;
+}
+.wb-subtask.has-parent::before { left: calc(var(--tree-x) - 1px); top: 0; bottom: 0; width: 2px; }
+.wb-subtask.has-parent.is-last-child::before { bottom: 50%; border-radius: 0 0 0 2px; }
+.wb-subtask.has-parent::after { left: var(--tree-x); top: calc(50% - 1px); width: 12px; height: 2px; }
+.wb-subtask.has-parent .wb-bullet { display: none; }   /* the elbow replaces the dash */
+
+/* independent subtask: not inside any task → sits at task level, small square bullet */
+.wb-subtask.is-independent { padding-left: 4px; }
+.wb-subtask.is-independent .wb-bullet {
+  width: 8px; height: 8px; margin: 0 2px; border-radius: 2px;
+  background: transparent; border: 1.5px solid var(--c-gray-500); box-sizing: border-box;
+}
+.wb-subtask.is-independent.is-added .wb-bullet { background: var(--green); border-color: var(--green); }
+
 /* Added (already in the real task list) */
 .wb-line.is-added .wb-input { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--c-gray-400); }
 .wb-line.is-added .wb-bullet { border-color: var(--green); background: var(--green); }
@@ -113,6 +137,38 @@
 .wb-hours:placeholder-shown { border-style: dashed; }
 .wb-hours:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--app-block-bg); }
 .wb-line.is-added .wb-hours { color: var(--muted); }
+
+/* ---- due-date chip (subtasks) ---- */
+.wb-due {
+  position: relative; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 26px; padding: 0 4px; box-sizing: border-box;
+  border: 1px dashed var(--border); border-radius: 6px; background: var(--panel);
+  font-size: 12px; font-weight: 600; color: var(--accent-dark); white-space: nowrap;
+}
+.wb-due:not(.has-date) .wb-due-label { font-size: 12px; filter: grayscale(1); opacity: 0.45; }
+.wb-due.has-date { border-style: solid; padding: 0 7px; }
+.wb-due.is-today   { color: var(--pending-text); background: var(--pending-bg); border-color: transparent; }
+.wb-due.is-overdue { color: var(--warn-text);    background: var(--warn-bg);    border-color: transparent; }
+.wb-due:hover { border-color: var(--accent); }
+.wb-due:hover .wb-due-label { opacity: 1; filter: none; }
+.wb-due:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--app-block-bg); }
+/* transparent native picker on top of the chip */
+.wb-due-input {
+  position: absolute; inset: 0; width: 100% !important; height: 100%;
+  opacity: 0; cursor: pointer; padding: 0 !important; border: none !important;
+}
+.wb-due-input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; cursor: pointer; }
+.wb-due-clear {
+  position: absolute; top: -7px; right: -7px; z-index: 1;
+  width: 16px; height: 16px; padding: 0; border-radius: 50%;
+  font-size: 11px; line-height: 14px; text-align: center;
+  background: var(--panel); color: var(--muted); border: 1px solid var(--border);
+  opacity: 0; box-shadow: none;
+}
+.wb-due:hover .wb-due-clear { opacity: 1; }
+.wb-due-clear:hover { color: var(--danger); transform: none; box-shadow: none; }
+.wb-line.is-added .wb-due { opacity: 0.6; }
 
 /* ---- drag & drop ---- */
 .wb-handle {
@@ -169,5 +225,7 @@ body.wb-is-dragging .wb-line.wb-dragging .wb-handle { opacity: 1; }
   .wb-hint { display: none; }
   .wb-toolbar-right { margin-left: 0; }
   .wb-subtask { padding-left: 20px; }
+  .wb-subtask.is-independent { padding-left: 4px; }
+  .wb-subtask.has-parent::after { width: 6px; }
   .wb-category .wb-input { font-size: 19px; }
 }

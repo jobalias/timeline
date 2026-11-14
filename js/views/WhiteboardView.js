@@ -4,7 +4,13 @@ import { escapeHtml } from '../utils.js';
 // Nothing here touches the real task list until you click "Add →" on a line.
 //
 // Line shape (stored in TaskStore.whiteboard):
-//   { id, kind: 'category' | 'task' | 'subtask', text, added: bool }
+//   { id, kind: 'category' | 'task' | 'subtask', text, added: bool,
+//     parentId?        – subtasks only: id of the task line it belongs to, or null = independent
+//     hours?, due?     – subtasks only
+//     linkedTaskId?, linkedSubtaskId? – set once added; ties the line to the real task/subtask
+//                        so renaming it in the modal or the grid doesn't lose the link }
+//
+// Parented subtasks always sit directly under their task (contiguous); _normalize() enforces it.
 
 const KINDS = ['category', 'task', 'subtask'];
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -56,25 +62,54 @@ export class WhiteboardView {
   _index(id) { return this.lines.findIndex((l) => l.id === id); }
   _save() { this.store.saveWhiteboard(); }
 
-  // nearest task line above a subtask
+  // the task line a subtask belongs to (null = independent)
   _parentTask(subId) {
-    const lines = this.lines;
-    for (let i = this._index(subId) - 1; i >= 0; i--) {
-      if (lines[i].kind === 'task') return lines[i];
-      if (lines[i].kind === 'category') return null;
-    }
+    const l = this._find(subId);
+    return l && l.kind === 'subtask' && l.parentId ? this._find(l.parentId) || null : null;
+  }
+
+  // subtask lines that belong to a task
+  _children(taskId) {
+    return this.lines.filter((l) => l.kind === 'subtask' && l.parentId === taskId);
+  }
+
+  // the task whose group ends right above line index `idx` (for "indent under the task above")
+  _groupAbove(idx) {
+    const prev = this.lines[idx - 1];
+    if (!prev) return null;
+    if (prev.kind === 'task') return prev;
+    if (prev.kind === 'subtask' && prev.parentId) return this._find(prev.parentId) || null;
     return null;
   }
 
-  // subtask lines directly under a task (until next task/category)
-  _children(taskId) {
-    const lines = this.lines;
-    const out = [];
-    for (let i = this._index(taskId) + 1; i < lines.length; i++) {
-      if (lines[i].kind !== 'subtask') break;
-      out.push(lines[i]);
+  // Keep the structure valid: a parented subtask must follow its task (or a sibling).
+  // Anything that breaks that becomes independent. Returns true if something changed.
+  _normalize() {
+    let changed = false;
+    let group = null;  // task whose children may appear next
+    for (const l of this.lines) {
+      if (l.kind !== 'subtask') {
+        if ('parentId' in l) { delete l.parentId; changed = true; }
+        group = l.kind === 'task' ? l : null;
+        continue;
+      }
+      // older whiteboards had no parentId → derive it from position once
+      if (!('parentId' in l)) { l.parentId = group ? group.id : null; changed = true; }
+      if (l.parentId && (!group || l.parentId !== group.id)) { l.parentId = null; changed = true; }
+      if (!l.parentId) group = null;  // an independent subtask closes the group above
     }
-    return out;
+    return changed;
+  }
+
+  // turn a line into a subtask: belongs to the task group above if there is one
+  _makeSubtask(l) {
+    const idx = this._index(l.id);
+    const wasTask = l.kind === 'task';
+    l.kind = 'subtask';
+    const g = this._groupAbove(idx);
+    l.parentId = g && g.id !== l.id ? g.id : null;
+    // a task's own children can't follow it into subtask-land → they become independent
+    if (wasTask) this._children(l.id).forEach((c) => { c.parentId = null; });
   }
 
   // ---------- rendering ----------
@@ -84,7 +119,29 @@ export class WhiteboardView {
       this.lines.push({ id: newId(), kind: 'task', text: '', added: false });
     }
 
-    const visible = this.lines.filter((l) => !(this.hideAdded && l.added && l.kind !== 'category'));
+    if (this._normalize()) this._save();
+
+    const isHidden = (l) => this.hideAdded && l.added && l.kind !== 'category';
+    // keep an added task visible while it still has visible subtasks,
+    // otherwise they'd look like they belong to the task above
+    const keepTask = new Set(
+      this.lines.filter((l) => l.kind === 'subtask' && l.parentId && !isHidden(l)).map((l) => l.parentId)
+    );
+    const visible = this.lines.filter((l) => !isHidden(l) || keepTask.has(l.id));
+
+    // per visible line: tree classes
+    const treeCls = new Map();
+    visible.forEach((l, i) => {
+      const next = visible[i + 1];
+      if (l.kind === 'task') {
+        if (next && next.kind === 'subtask' && next.parentId === l.id) treeCls.set(l.id, ' has-children');
+      } else if (l.kind === 'subtask') {
+        if (!l.parentId) { treeCls.set(l.id, ' is-independent'); return; }
+        const last = !next || next.kind !== 'subtask' || next.parentId !== l.parentId;
+        treeCls.set(l.id, ' has-parent' + (last ? ' is-last-child' : ''));
+      }
+    });
+
     const placeholders = {
       category: 'Category',
       task: 'Task…   (type # for a category, - for a subtask)',
@@ -97,14 +154,17 @@ export class WhiteboardView {
         ? `<button class="wb-added" data-act="unadd" title="Added to your tasks — click to mark as not added">✓ Added</button>`
         : `<button class="wb-add" data-act="add" title="Add this to your tasks"${l.text.trim() ? '' : ' disabled'}>Add →</button>`;
       const handle = canAdd
-        ? `<span class="wb-handle" title="Drag to move${l.kind === 'task' ? ' (brings its subtasks along)' : ' under a task'}" aria-hidden="true">⋮⋮</span>`
+        ? `<span class="wb-handle" title="${l.kind === 'task'
+            ? 'Drag to move (brings its subtasks along)'
+            : 'Drag to move. Drop slightly right under a task to put it in that task, or to the left to keep it on its own'}" aria-hidden="true">⋮⋮</span>`
         : '';
       const hours = l.kind === 'subtask'
         ? `<input class="wb-hours" type="number" min="0" step="0.5" inputmode="decimal"
-             value="${escapeHtml(l.hours ?? '')}" placeholder="h" title="Est. hours (optional)" aria-label="Estimated hours">`
+             value="${escapeHtml(l.hours ?? '')}" placeholder="h" title="Est. hours (optional)" aria-label="Estimated hours">
+           ${this._dueBox(l)}`
         : '';
       return `
-        <div class="wb-line wb-${l.kind}${l.added ? ' is-added' : ''}" data-id="${l.id}">
+        <div class="wb-line wb-${l.kind}${l.added ? ' is-added' : ''}${treeCls.get(l.id) || ''}" data-id="${l.id}">
           ${handle}
           <span class="wb-bullet" aria-hidden="true"></span>
           <input class="wb-input" type="text" value="${escapeHtml(l.text)}"
@@ -119,6 +179,26 @@ export class WhiteboardView {
     this.clearAddedBtn.disabled = total === 0;
     this.clearAddedBtn.textContent = total ? `Clear added (${total})` : 'Clear added';
     this._syncStyleBtns();
+  }
+
+  // small due-date chip: calendar glyph when empty, "Nov 14" when set.
+  // A transparent native date input sits on top so tapping opens the OS picker.
+  _dueBox(l) {
+    const due = l.due || '';
+    let label = '📅';
+    let cls = '';
+    if (due) {
+      const d = new Date(due + 'T00:00:00');
+      label = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      cls = d < today ? ' is-overdue' : d.getTime() === today.getTime() ? ' is-today' : '';
+    }
+    return `
+      <span class="wb-due${due ? ' has-date' : ''}${cls}" title="${due ? 'Due ' + label : 'Due date (optional)'}">
+        <span class="wb-due-label">${escapeHtml(label)}</span>
+        <input class="wb-due-input" type="date" value="${escapeHtml(due)}" aria-label="Due date" tabindex="-1">
+        ${due ? '<button class="wb-due-clear" data-act="clear-due" title="Clear due date" tabindex="-1">×</button>' : ''}
+      </span>`;
   }
 
   _focus(id, caret = 'end') {
@@ -145,8 +225,10 @@ export class WhiteboardView {
           this._setKind(id, btn.dataset.kind);
         } else {
           // nothing focused → start a new line of that style at the bottom
-          const line = { id: newId(), kind: btn.dataset.kind, text: '', added: false };
+          const line = { id: newId(), kind: 'task', text: '', added: false };
           this.lines.push(line);
+          if (btn.dataset.kind === 'subtask') this._makeSubtask(line);
+          else line.kind = btn.dataset.kind;
           this._save();
           this.render();
           this._focus(line.id);
@@ -172,8 +254,10 @@ export class WhiteboardView {
     if (!l || l.kind === kind) return;
     const input = this.listEl.querySelector(`.wb-line[data-id="${id}"] .wb-input`);
     const caret = input ? input.selectionStart : 'end';
-    l.kind = kind;
+    if (kind === 'subtask') this._makeSubtask(l);
+    else l.kind = kind;
     if (kind === 'category') l.added = false;
+    this._normalize();
     this._save();
     this.render();
     this._focus(id, caret);
@@ -205,6 +289,7 @@ export class WhiteboardView {
         if (l) { l.hours = e.target.value; this._save(); }
         return;
       }
+      if (e.target.classList.contains('wb-due-input')) return; // handled on 'change'
       if (!e.target.classList.contains('wb-input')) return;
       const row = lineOf(e.target);
       const l = this._find(row.dataset.id);
@@ -215,8 +300,9 @@ export class WhiteboardView {
       const shortcut = /^#\s/.test(v) ? 'category' : /^[-*]\s/.test(v) ? 'subtask' : null;
       if (shortcut) {
         l.text = v.slice(2);
-        l.kind = shortcut;
-        if (shortcut === 'category') l.added = false;
+        if (shortcut === 'subtask') { if (l.kind !== 'subtask') this._makeSubtask(l); }
+        else { l.kind = shortcut; l.added = false; }
+        this._normalize();
         this._save();
         this.render();
         this._focus(l.id, 'start');
@@ -258,8 +344,7 @@ export class WhiteboardView {
         }
         case 'Tab': {
           e.preventDefault();
-          const k = KINDS.indexOf(l.kind) + (e.shiftKey ? -1 : 1);
-          if (k >= 0 && k < KINDS.length) this._setKind(id, KINDS[k]);
+          this._indent(id, e.shiftKey ? -1 : 1);
           return;
         }
         case 'Backspace': {
@@ -285,6 +370,23 @@ export class WhiteboardView {
       }
     });
 
+    // due date picked
+    this.listEl.addEventListener('change', (e) => {
+      if (!e.target.classList.contains('wb-due-input')) return;
+      const l = this._find(lineOf(e.target).dataset.id);
+      if (!l) return;
+      l.due = e.target.value || '';
+      this._save();
+      this.render();
+    });
+
+    // desktop browsers only open the picker from their tiny icon → open it on any click
+    this.listEl.addEventListener('click', (e) => {
+      const input = e.target.classList.contains('wb-due-input') ? e.target : null;
+      if (!input) return;
+      try { input.showPicker?.(); } catch { /* not allowed / unsupported → native behaviour */ }
+    });
+
     this.listEl.addEventListener('paste', (e) => {
       if (!e.target.classList.contains('wb-input')) return;
       const text = (e.clipboardData || window.clipboardData).getData('text');
@@ -301,9 +403,48 @@ export class WhiteboardView {
       const id = lineOf(btn).dataset.id;
       const act = btn.dataset.act;
       if (act === 'add') this._startAdd(id);
-      else if (act === 'unadd') { const l = this._find(id); l.added = false; this._save(); this.render(); }
+      else if (act === 'unadd') { this._unlink(this._find(id)); this._save(); this.render(); }
       else if (act === 'del') this._deleteLine(id);
+      else if (act === 'clear-due') { const l = this._find(id); l.due = ''; this._save(); this.render(); }
     });
+  }
+
+  // Tab (+1) / Shift+Tab (-1)
+  // levels: category → task → independent subtask → subtask inside the task above
+  _indent(id, dir) {
+    const l = this._find(id);
+    if (!l) return;
+    const input = this.listEl.querySelector(`.wb-line[data-id="${id}"] .wb-input`);
+    const caret = input ? input.selectionStart : 'end';
+    const idx = this._index(id);
+
+    if (dir > 0) {
+      if (l.kind === 'category') { l.kind = 'task'; }
+      else if (l.kind === 'task') { this._makeSubtask(l); }
+      else if (l.kind === 'subtask' && !l.parentId) {
+        const g = this._groupAbove(idx);
+        if (!g) return;           // nothing above to belong to
+        l.parentId = g.id;
+      } else return;
+    } else {
+      if (l.kind === 'subtask' && l.parentId) {
+        // step out of the task; if siblings follow, move below them so the group stays together
+        const parentId = l.parentId;
+        l.parentId = null;
+        const sibs = this.lines.filter((x) => x.kind === 'subtask' && x.parentId === parentId);
+        const lastSib = sibs[sibs.length - 1];
+        if (lastSib && this._index(lastSib.id) > idx) {
+          this.lines.splice(idx, 1);
+          this.lines.splice(this._index(lastSib.id) + 1, 0, l);
+        }
+      } else if (l.kind === 'subtask') { l.kind = 'task'; }
+      else if (l.kind === 'task') { l.kind = 'category'; l.added = false; }
+      else return;
+    }
+    this._normalize();
+    this._save();
+    this.render();
+    this._focus(id, caret);
   }
 
   _splitLine(id, selStart, selEnd) {
@@ -312,10 +453,12 @@ export class WhiteboardView {
     const before = l.text.slice(0, selStart);
     const after = l.text.slice(selEnd);
     const nextKind = l.kind === 'category' ? 'task' : l.kind;
+    // new subtask lines stay in the same task (or stay independent)
+    const inherit = (line) => { if (line.kind === 'subtask') line.parentId = l.parentId || null; return line; };
 
     // caret at very start of a non-empty line → insert blank line above
     if (selStart === 0 && l.text) {
-      const above = { id: newId(), kind: l.kind, text: '', added: false };
+      const above = inherit({ id: newId(), kind: l.kind, text: '', added: false });
       this.lines.splice(idx, 0, above);
       this._save();
       this.render();
@@ -324,7 +467,7 @@ export class WhiteboardView {
     }
 
     l.text = before;
-    const line = { id: newId(), kind: nextKind, text: after, added: false };
+    const line = inherit({ id: newId(), kind: nextKind, text: after, added: false });
     this.lines.splice(idx + 1, 0, line);
     this._save();
     this.render();
@@ -378,9 +521,10 @@ export class WhiteboardView {
   }
 
   // ---------- drag & drop (pointer events → works with mouse and touch) ----------
-  // Dragging a subtask re-parents it under whichever task ends up above it.
-  // Dragging a task moves it together with its subtasks, and only drops
-  // between task blocks (so it can't split another task's subtasks).
+  // Subtask: dropped right below a task (or its subtasks) it joins that task if the
+  //   pointer is to the right, or stays independent if it's to the left.
+  //   Dropped between two subtasks of a task, it always joins that task.
+  // Task: moves together with its subtasks, and never lands inside another task's group.
   _bindDrag() {
     this.listEl.addEventListener('pointerdown', (e) => {
       const handle = e.target.closest('.wb-handle');
@@ -397,18 +541,21 @@ export class WhiteboardView {
       document.activeElement?.blur?.();
 
       const indicator = document.createElement('div');
-      indicator.className = 'wb-drop-indicator' + (line.kind === 'subtask' ? ' is-subtask' : '');
+      indicator.className = 'wb-drop-indicator';
 
-      this._drag = { line, ids: new Set(ids), dragRows, indicator, beforeId: undefined, pointerId: e.pointerId };
+      this._drag = {
+        line, ids: new Set(ids), dragRows, indicator,
+        beforeId: undefined, parentId: null, pointerId: e.pointerId,
+      };
       handle.setPointerCapture?.(e.pointerId);
       document.body.classList.add('wb-is-dragging');
-      this._dragMove(e.clientY);
+      this._dragMove(e.clientX, e.clientY);
     });
 
     this.listEl.addEventListener('pointermove', (e) => {
       if (!this._drag || e.pointerId !== this._drag.pointerId) return;
       e.preventDefault();
-      this._dragMove(e.clientY);
+      this._dragMove(e.clientX, e.clientY);
       // auto-scroll near the top/bottom of the window
       const edge = 60;
       if (e.clientY < edge) window.scrollBy(0, -12);
@@ -417,43 +564,63 @@ export class WhiteboardView {
 
     const end = (e, cancelled) => {
       if (!this._drag || e.pointerId !== this._drag.pointerId) return;
-      const { ids, indicator, beforeId } = this._drag;
+      const { ids, indicator, beforeId, line, parentId } = this._drag;
       indicator.remove();
       this.listEl.querySelectorAll('.wb-drop-parent').forEach((r) => r.classList.remove('wb-drop-parent'));
       document.body.classList.remove('wb-is-dragging');
       this._drag = null;
-      if (!cancelled && beforeId !== undefined) this._moveBlock([...ids], beforeId);
-      else this.render();
+      if (!cancelled && beforeId !== undefined) {
+        if (line.kind === 'subtask') line.parentId = parentId;
+        this._moveBlock([...ids], beforeId);
+      } else this.render();
     };
     this.listEl.addEventListener('pointerup', (e) => end(e, false));
     this.listEl.addEventListener('pointercancel', (e) => end(e, true));
   }
 
-  _dragMove(y) {
+  _dragMove(x, y) {
     const d = this._drag;
     const rows = [...this.listEl.querySelectorAll('.wb-line')].filter((r) => !d.ids.has(r.dataset.id));
-    // a task block may only land before a task/category (or at the very end)
-    const candidates = d.line.kind === 'task'
-      ? rows.filter((r) => !r.classList.contains('wb-subtask'))
-      : rows;
+    const isChildRow = (r) => r && r.classList.contains('has-parent');
+    // a task block may not land between a task and its subtasks
+    const candidates = d.line.kind === 'task' ? rows.filter((r) => !isChildRow(r)) : rows;
 
     const target = candidates.find((r) => {
       const b = r.getBoundingClientRect();
       return y < b.top + b.height / 2;
     });
+    d.beforeId = target ? target.dataset.id : null;
+
+    // what's directly above the drop point (ignoring the rows being dragged)
+    const ti = target ? rows.indexOf(target) : rows.length;
+    const prevRow = rows[ti - 1] || null;
+
+    d.parentId = null;
+    if (d.line.kind === 'subtask') {
+      const lineOf = (r) => r && this._find(r.dataset.id);
+      const next = lineOf(target);
+      const prev = lineOf(prevRow);
+      const groupOfPrev = prev?.kind === 'task' ? prev.id
+        : prev?.kind === 'subtask' && prev.parentId ? prev.parentId : null;
+
+      if (next?.kind === 'subtask' && next.parentId) {
+        d.parentId = next.parentId;                      // between siblings → must join
+      } else if (groupOfPrev) {
+        // just below a task group → pointer to the right (indented, where a subtask's
+        // handle sits) = join; at the left edge (where a task's handle sits) = independent
+        const rowLeft = this.listEl.getBoundingClientRect().left;
+        d.parentId = x - rowLeft > 16 ? groupOfPrev : null;
+      }
+    }
 
     if (target) this.listEl.insertBefore(d.indicator, target);
     else this.listEl.appendChild(d.indicator);
-    d.beforeId = target ? target.dataset.id : null;
+    d.indicator.classList.toggle('is-subtask', !!d.parentId);
 
-    // highlight the task the subtask would belong to
+    // highlight the task the subtask would join
     this.listEl.querySelectorAll('.wb-drop-parent').forEach((r) => r.classList.remove('wb-drop-parent'));
-    if (d.line.kind === 'subtask') {
-      let prev = d.indicator.previousElementSibling;
-      while (prev && (d.ids.has(prev.dataset.id) || prev.classList.contains('wb-subtask'))) {
-        prev = prev.previousElementSibling;
-      }
-      if (prev && prev.classList.contains('wb-task')) prev.classList.add('wb-drop-parent');
+    if (d.parentId) {
+      this.listEl.querySelector(`.wb-line[data-id="${d.parentId}"]`)?.classList.add('wb-drop-parent');
     }
   }
 
@@ -484,32 +651,58 @@ export class WhiteboardView {
     else if (l.kind === 'subtask') this._openPicker(l);
   }
 
+  // the real task a whiteboard task line refers to: its saved link first, name as fallback
+  _storeTaskFor(line) {
+    if (!line) return null;
+    return (line.linkedTaskId && this.store.find(line.linkedTaskId)) || this._findStoreTask(line.text);
+  }
+
+  _subData(c) {
+    return { name: c.text.trim(), estHours: c.hours || '', due: c.due || '', wbId: c.id };
+  }
+
   // Task → open Add Task modal prefilled with its (not-yet-added) subtasks
   _addTask(line) {
     const name = line.text.trim();
     const children = this._children(line.id).filter((c) => !c.added && c.text.trim());
-    const subs = children.map((c) => ({ name: c.text.trim(), estHours: c.hours || '' }));
-    const existing = this._findStoreTask(name);
+    const subs = children.map((c) => this._subData(c));
+    const existing = this._storeTaskFor(line);
 
-    if (existing && this._isOngoing(existing)) {
+    if (existing && (this._isOngoing(existing) || existing.persistent)) {
       // already a live task → open it with the new subtasks appended
       this.taskModal.openEdit(existing.id, { extraSubtasks: subs });
     } else {
       this.taskModal.openNew({ name, subtasks: subs });
     }
 
-    this.taskModal.setAfterSaveOnce((savedId) => {
-      line.added = true;
-      this._markSubtasksAdded(savedId, children);
+    this.taskModal.setAfterSaveOnce((savedId, links) => {
+      this._linkTask(line, savedId);
+      this._linkSubtasks(savedId, links);
       this._afterPromote();
     });
   }
 
-  _markSubtasksAdded(savedId, lines) {
-    const t = this.store.find(savedId);
-    if (!t) return;
-    const names = new Set(t.subtasks.map((s) => norm(s.name)));
-    lines.forEach((c) => { if (names.has(norm(c.text))) c.added = true; });
+  _linkTask(line, taskId) {
+    line.added = true;
+    line.linkedTaskId = taskId;
+  }
+
+  // mark the whiteboard lines that were actually saved (by line id, so renaming
+  // them in the modal doesn't matter; rows deleted in the modal stay un-added)
+  _linkSubtasks(taskId, links = []) {
+    links.forEach(({ wbId, subtaskId }) => {
+      const l = this._find(wbId);
+      if (!l) return;
+      l.added = true;
+      l.linkedTaskId = taskId;
+      l.linkedSubtaskId = subtaskId;
+    });
+  }
+
+  _unlink(l) {
+    l.added = false;
+    delete l.linkedTaskId;
+    delete l.linkedSubtaskId;
   }
 
   _afterPromote() {
@@ -556,7 +749,7 @@ export class WhiteboardView {
     const q = norm(this.pickFilter.value);
     const parent = this._parentTask(sub.id);
     const parentName = parent?.text.trim();
-    const parentStore = parentName ? this._findStoreTask(parentName) : null;
+    const parentStore = parent ? this._storeTaskFor(parent) : null;
 
     const tasks = this.store.getSorted().filter((t) => this._isOngoing(t) || t.persistent || t.subtasks.length === 0);
     const match = (s) => !q || norm(s).includes(q);
@@ -575,7 +768,7 @@ export class WhiteboardView {
       if (parentStore && (this._isOngoing(parentStore) || parentStore.persistent || parentStore.subtasks.length === 0)) {
         html += item('existing', parentStore.id, escapeHtml(parentStore.name), 'already a task', parentStore.color);
       } else {
-        html += item('new', parentName, `Create “${escapeHtml(parentName)}”`, 'new task');
+        html += item('parent', parentName, `Create “${escapeHtml(parentName)}”`, 'new task');
       }
     }
 
@@ -600,7 +793,7 @@ export class WhiteboardView {
     const sub = this._find(this._pickSubId);
     this._closePicker();
     if (!sub) return;
-    const subData = { name: sub.text.trim(), estHours: sub.hours || '' };
+    const subData = this._subData(sub);
     const parent = this._parentTask(sub.id);
 
     if (mode === 'existing') {
@@ -610,11 +803,12 @@ export class WhiteboardView {
       this.taskModal.openNew({ name: value, subtasks: [subData] });
     }
 
-    this.taskModal.setAfterSaveOnce((savedId) => {
-      this._markSubtasksAdded(savedId, [sub]);
-      const saved = this.store.find(savedId);
-      // if we just created the whiteboard parent task, mark it added too
-      if (parent && saved && norm(parent.text) === norm(saved.name)) parent.added = true;
+    this.taskModal.setAfterSaveOnce((savedId, links) => {
+      this._linkSubtasks(savedId, links);
+      // created (or picked) the whiteboard parent task → that line is now added too
+      if (parent && (mode === 'parent' || this._storeTaskFor(parent)?.id === savedId)) {
+        this._linkTask(parent, savedId);
+      }
       this._afterPromote();
     });
   }

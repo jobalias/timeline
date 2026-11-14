@@ -16,6 +16,9 @@ export class GridView {
     this.showCompleted = false;
     this.wrap = document.getElementById('gridWrap');
 
+    // "⏱ Under X h" highlight — null = off
+    this.hoursFilter = null;
+
     this.isMobile = window.innerWidth < 768;
     this.effectiveDays = this.isMobile ? 10 : DAYS_SHOWN;
     const halfWindow = Math.floor(this.effectiveDays / 2);
@@ -38,6 +41,7 @@ export class GridView {
     this._bindScroll();
     this._bindResize();
     this._bindWindowNav();
+    this._bindHoursFilter();
   }
 
   // ----- Button clicks: edit / delete / schedule / waiting -----
@@ -301,6 +305,68 @@ export class GridView {
     requestAnimationFrame(() => this._updateStickyMonths());
   }
 
+  // ==================================================================
+  //  "⏱ Under X h" — highlight subtasks with a small estimate
+  // ==================================================================
+  _bindHoursFilter() {
+    const box = document.getElementById('hoursFilter');
+    if (!box) return;
+    const input = document.getElementById('hoursFilterInput');
+    const toggle = document.getElementById('hoursFilterToggle');
+    const clear = document.getElementById('hoursFilterClear');
+
+    // remember the last X you used (just a convenience)
+    try {
+      const saved = localStorage.getItem('hoursFilterX');
+      if (saved) input.value = saved;
+    } catch { /* storage unavailable */ }
+
+    const apply = () => {
+      const x = parseFloat(input.value);
+      this.hoursFilter = Number.isFinite(x) && x > 0 ? x : null;
+      box.classList.toggle('on', this.hoursFilter !== null);
+      try { if (input.value) localStorage.setItem('hoursFilterX', input.value); } catch {}
+      this.render();
+    };
+
+    input.addEventListener('input', apply);              // typing a number turns it on
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { this.hoursFilter = null; box.classList.remove('on'); input.blur(); this.render(); }
+      if (e.key === 'Enter') input.blur();
+    });
+    toggle.addEventListener('click', () => {
+      if (this.hoursFilter !== null) {                    // on → off (keeps the number)
+        this.hoursFilter = null;
+        box.classList.remove('on');
+        this.render();
+      } else if (parseFloat(input.value) > 0) {           // off with a number → on
+        apply();
+      } else {                                            // no number yet → type one
+        input.focus();
+      }
+    });
+    clear.addEventListener('click', () => {
+      this.hoursFilter = null;
+      box.classList.remove('on');
+      this.render();
+    });
+  }
+
+  _matchesHours(st) {
+    const x = this.hoursFilter;
+    return x !== null && !st.done && st.estHoursNum > 0 && st.estHoursNum < x;
+  }
+
+  _updateHoursCount(tasks) {
+    const el = document.getElementById('hoursFilterCount');
+    if (!el) return;
+    this.wrap.classList.toggle('hf-on', this.hoursFilter !== null);
+    if (this.hoursFilter === null) { el.textContent = ''; return; }
+    const n = tasks.reduce((sum, t) => sum + t.subtasks.filter((s) => this._matchesHours(s)).length, 0);
+    el.textContent = String(n);
+    el.title = `${n} subtask${n === 1 ? '' : 's'} under ${this.hoursFilter}h`;
+  }
+
   onShow() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => this._scrollToToday());
@@ -312,6 +378,7 @@ export class GridView {
   // ==================================================================
   render() {
     const tasks = this.store.getSorted();
+    this._updateHoursCount(tasks);
     if (tasks.length === 0) {
       this.wrap.innerHTML =
         '<div class="empty">No tasks yet. Click “+ Add Task” to start.</div>';
@@ -378,7 +445,8 @@ export class GridView {
       const taskNoteBadge = (task.note && task.note.trim())
         ? '<span class="note-dot" title="Has a note"></span>' : '';
 
-      html += `<tr class="task-tr" style="--task-color:${task.color};">
+      const hfTask = task.subtasks.some((s) => this._matchesHours(s)) ? ' hf-has-match' : '';
+      html += `<tr class="task-tr${hfTask}" style="--task-color:${task.color};">
                  <td class="label-col ${taskCls}" data-task-id="${task.id}" style="--task-color:${task.color};">
                    ${taskNoteBadge}
                    <span class="task-title" title="${escapeHtml(task.name)}">${escapeHtml(task.name)}</span>
@@ -439,12 +507,14 @@ export class GridView {
       : `<button class="ball-dot" data-task-id="${task.id}" data-sub-index="${si}"
            title="Waiting on someone? Click to minimize">🏐</button>`;
 
-    let html = `<tr class="subtask-tr" style="--task-color:${task.color};">
+    const hf = this._matchesHours(st) ? ' hf-match' : '';
+    let html = `<tr class="subtask-tr${hf}" style="--task-color:${task.color};">
       <td class="label-col ${rowCls}">
         ${noteBadge}
         <div class="st-row">
           <span class="st-lead">${leadSlot}</span>
           <span class="st-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
+          ${hf ? `<span class="hf-chip" title="Estimated ${st.estHoursNum}h">${st.estHoursNum}h</span>` : ''}
           <span class="st-controls">
             <span class="due-today-badge">${!waiting && dueToday ? '⚠️' : ''}</span>
             ${clockSlot}
@@ -554,8 +624,9 @@ export class GridView {
       const taskNoteBadge = (task.note && task.note.trim())
         ? '<span class="note-dot" title="Has a note"></span>' : '';
 
+      const hfTask = task.subtasks.some((s) => this._matchesHours(s)) ? ' hf-has-match' : '';
       html += `
-        <div class="m-task" style="--task-color:${task.color};">
+        <div class="m-task${hfTask}" style="--task-color:${task.color};">
           <div class="label-col ${taskCls}" data-task-id="${task.id}" style="--task-color:${task.color};">
             ${taskNoteBadge}
             <span class="task-title" title="${escapeHtml(task.name)}">${escapeHtml(task.name)}</span>
@@ -583,8 +654,9 @@ export class GridView {
 
   _renderMobileSubtask(task, st, si, today) {
     const waiting = st.waiting;
-    const rowCls = st.done ? 'm-subtask subtask-done'
-      : (waiting ? 'm-subtask subtask-waiting' : 'm-subtask');
+    const hf = this._matchesHours(st);
+    const rowCls = (st.done ? 'm-subtask subtask-done'
+      : (waiting ? 'm-subtask subtask-waiting' : 'm-subtask')) + (hf ? ' hf-match' : '');
 
     const noteBadge = (st.note && st.note.trim())
       ? '<span class="note-dot" title="Has a note"></span>' : '';
@@ -602,6 +674,7 @@ export class GridView {
           ${noteBadge}
           ${waitMark}
           <span class="m-sub-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
+          ${hf ? `<span class="hf-chip">${st.estHoursNum}h</span>` : ''}
         </div>
         <div class="m-sub-right">
           ${dueChip}

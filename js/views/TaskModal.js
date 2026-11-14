@@ -38,7 +38,7 @@ export class TaskModal {
     this.nameInput.value = prefill?.name || '';
     this.subtaskList.innerHTML = '';
     const pre = prefill?.subtasks || [];
-    pre.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '' }));
+    pre.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '', due: st.due || '', wbId: st.wbId }));
     if (pre.length === 0) this._addSubtaskRow();
     this.backdrop.classList.add('open');
 
@@ -63,7 +63,7 @@ export class TaskModal {
     this.subtaskList.innerHTML = '';
     t.subtasks.forEach((st) => this._addSubtaskRow(st));
     const firstNew = this.subtaskList.children.length;
-    extraSubtasks.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '' }));
+    extraSubtasks.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '', due: st.due || '', wbId: st.wbId }));
     if (t.subtasks.length === 0 && extraSubtasks.length === 0) this._addSubtaskRow();
     this.backdrop.classList.add('open');
 
@@ -99,6 +99,7 @@ export class TaskModal {
     const row = document.createElement('div');
     row.className = 'subtask-row';
     if (data.id) row.dataset.subtaskId = data.id;
+    if (data.wbId) row.dataset.wbId = data.wbId;   // came from a whiteboard line
     row.innerHTML = `
       <button class="del-btn">✕</button>
       <input class="name-input" type="text" placeholder="Subtask name"
@@ -168,16 +169,19 @@ export class TaskModal {
 
     const rows = this.subtaskList.querySelectorAll('.subtask-row');
     const subtasks = [];
+    const wbLinks = [];   // [{ wbId, subtaskId }] — whiteboard lines saved in this modal
     rows.forEach((r) => {
       const inputs = r.querySelectorAll('input');
       const stName = inputs[0].value.trim();
       if (!stName) return;
-      subtasks.push(new Subtask({
+      const st = new Subtask({
         id: r.dataset.subtaskId || null,
         name: stName,
         due: inputs[1].value,
         estHours: inputs[2].value,
-      }));
+      });
+      subtasks.push(st);
+      if (r.dataset.wbId) wbLinks.push({ wbId: r.dataset.wbId, subtaskId: st.id });
     });
 
     let savedId;
@@ -232,7 +236,7 @@ export class TaskModal {
     const afterOnce = this._afterSaveOnce;
     this.close();
     if (afterOnce) {
-      try { afterOnce(savedId); } catch (e) { console.warn('afterSaveOnce failed', e); }
+      try { afterOnce(savedId, wbLinks); } catch (e) { console.warn('afterSaveOnce failed', e); }
     }
     this.onAfterSave(savedId, newSubtaskIndices);
   }

@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="css/mobile.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/whiteboard.css">
+  <link rel="stylesheet" href="css/hoursfilter.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -59,6 +60,17 @@
 
         <!-- Primary -->
         <button class="primary" id="addTaskBtn">+ Add Task</button>
+
+        <!-- Highlight subtasks estimated under X hours -->
+        <div class="hours-filter" id="hoursFilter" title="Highlight subtasks estimated under X hours">
+          <button class="hf-toggle" id="hoursFilterToggle" type="button">⏱ Under</button>
+          <input class="hf-input" id="hoursFilterInput" type="number" min="0" step="0.5"
+                 inputmode="decimal" placeholder="X" aria-label="Hours">
+          <span class="hf-unit">h</span>
+          <span class="hf-count" id="hoursFilterCount"></span>
+          <button class="hf-clear" id="hoursFilterClear" type="button" title="Turn off">×</button>
+        </div>
+
         <div class="grid-nav-bar">
           <div class="tb-segment grid-nav">
             <button id="gridPrev">←</button>
@@ -175,7 +187,7 @@
         </div>
       </div>
       <div class="wb-hint">
-        <kbd>Enter</kbd> new line · <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> change level ·
+        <kbd>Enter</kbd> new line · <kbd>Tab</kbd>/<kbd>⇧Tab</kbd> indent/outdent (a subtask can sit on its own or inside a task) ·
         start with <kbd>#</kbd> for a category, <kbd>-</kbd> for a subtask ·
         drag <b>⋮⋮</b> to move ·
         <kbd>⌘Enter</kbd> or <b>Add →</b> to send a line to your tasks
