@@ -1,0 +1,39 @@
+/* ===== Undo / redo ===== */
+
+/* buttons at the right end of the tab bar */
+.undo-group { margin-left: auto; display: flex; align-items: center; gap: 4px; padding-bottom: 4px; }
+.undo-btn {
+  width: 34px; height: 30px; padding: 0;
+  font-size: 17px; line-height: 1; color: var(--text);
+  border-radius: 8px;
+}
+.undo-btn:disabled { opacity: 0.3; transform: none; box-shadow: none; }
+
+/* toast, bottom-centre */
+.undo-toast {
+  position: fixed; left: 50%; bottom: 24px; z-index: 50;
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 10px;
+  max-width: min(92vw, 480px); padding: 10px 10px 10px 16px;
+  background: var(--c-gray-850, #2b2219); color: var(--c-white);
+  border-radius: var(--radius); box-shadow: var(--shadow-modal);
+  font-size: 14px;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.undo-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.undo-toast #undoToastText { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo-toast-btn {
+  flex: none; padding: 5px 12px; font-weight: 600; font-size: 13px;
+  background: var(--c-white); color: var(--c-black); border: none;
+}
+.undo-toast-close {
+  flex: none; padding: 2px 6px; font-size: 16px; line-height: 1;
+  background: transparent; color: var(--c-white); border: none; opacity: 0.7; box-shadow: none;
+}
+.undo-toast-btn:hover, .undo-toast-close:hover { transform: none; }
+.undo-toast.no-action .undo-toast-btn { display: none; }
+
+@media (max-width: 700px) {
+  .undo-group { position: sticky; right: 0; background: var(--bg); padding-left: 6px; }
+  .undo-toast { bottom: 16px; }
+}

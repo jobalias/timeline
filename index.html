@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/whiteboard.css">
   <link rel="stylesheet" href="css/hoursfilter.css">
+  <link rel="stylesheet" href="css/undo.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -47,6 +48,10 @@
       <button class="view-tab" id="tabGrid">📊 Grid</button>
       <button class="view-tab" id="tabPlanner">🗓️ Planner</button>
       <button class="view-tab" id="tabProgress">🌱 Progress</button>
+      <div class="undo-group">
+        <button class="undo-btn" id="undoBtn" title="Undo (⌘Z)" aria-label="Undo" disabled>↶</button>
+        <button class="undo-btn" id="redoBtn" title="Redo (⌘⇧Z)" aria-label="Redo" disabled>↷</button>
+      </div>
     </div>
 
     <!-- ===== GRID VIEW ===== -->
@@ -344,6 +349,13 @@
         <button id="delCancel" style="margin-top:4px;color:var(--muted);">Cancel</button>
       </div>
     </div>
+  </div>
+
+  <!-- ============ Undo toast ============ -->
+  <div class="undo-toast" id="undoToast" role="status" aria-live="polite">
+    <span id="undoToastText"></span>
+    <button class="undo-toast-btn" id="undoToastBtn">Undo</button>
+    <button class="undo-toast-close" id="undoToastClose" aria-label="Dismiss">×</button>
   </div>
 
   <!-- ============ App entry point ============ -->

@@ -73,6 +73,48 @@
   padding: 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
 }
 
+/* ---- all-time running count ---- */
+.prog-total-num {
+  font-family: var(--font-serif); font-size: 40px; font-weight: 700; line-height: 1;
+  color: var(--green);
+}
+.prog-total-label { font-size: 15px; font-weight: 600; margin-top: 4px; }
+.prog-total-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.prog-total-sub:empty { display: none; }
+
+/* ---- hours per day (in the day header) ---- */
+.prog-hours-day {
+  display: flex; align-items: center; gap: 6px; margin-top: 6px;
+}
+.prog-hours-bar {
+  flex: 1; height: 6px; border-radius: 3px; background: var(--neutral-bg); overflow: hidden;
+}
+.prog-hours-bar span { display: block; height: 100%; border-radius: 3px; background: var(--green); }
+.prog-hours-num { font-size: 12px; font-weight: 700; color: var(--green); min-width: 28px; text-align: right; }
+.prog-hours-day.is-empty { justify-content: center; }
+.prog-hours-day.is-empty .prog-hours-num { color: var(--c-gray-350); font-weight: 400; text-align: center; }
+
+/* ---- drag a completed item to another day ---- */
+.prog-drag { cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.prog-tc-list li.prog-drag { border-radius: 4px; }
+.prog-tc-list li.prog-drag:hover { background: var(--c-overlay-06); }
+.prog-chip.prog-drag:hover { border-color: var(--green); }
+.prog-dragging { opacity: 0.3; }
+.prog-ghost {
+  position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none;
+  list-style: none; margin: 0;
+  background: var(--chip-bg); border: 1px solid var(--green); border-radius: 10px;
+  padding: 6px 8px; box-shadow: var(--shadow-modal); opacity: 0.95;
+  font-size: 13px; font-weight: 600; color: var(--gold-text);
+  animation: none;
+}
+body.prog-is-dragging, body.prog-is-dragging * { cursor: grabbing !important; user-select: none; }
+.prog-day.prog-drop-target {
+  border-color: var(--green); background: var(--chip-bg);
+  box-shadow: 0 0 0 3px var(--chip-border);
+}
+body.prog-is-dragging .prog-day.prog-future { opacity: 0.45; }
+
 @keyframes prog-pop {
   0% { transform: scale(0.9); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }

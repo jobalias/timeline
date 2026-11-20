@@ -2,6 +2,8 @@ import { Task, PALETTE } from '../models/Task.js';
 import {_getSoonestDueDate } from '../utils.js';
 
 const STORAGE_KEY = 'taskGrid';
+const UNDO_LIMIT = 5;        // how many actions you can undo
+const CHAIN_MS = 400;        // saves this close together (one action doing 2 saves) = one undo step
 
 export class TaskStore {
   constructor() {
@@ -18,6 +20,112 @@ export class TaskStore {
     this._pendingSave = false;
     this._retryTimer = null;
     this._retryCount = 0;
+
+    // ---- undo / redo (snapshots of tasks + completion log + whiteboard) ----
+    this._undo = [];
+    this._redo = [];
+    this._snap = this._serialize();
+    this._lastKey = null;
+    this._lastChangeAt = 0;
+    this.historyFns = [];
+  }
+
+  // ==================== Undo / redo ====================
+  onHistory(fn) { this.historyFns.push(fn); }
+  canUndo() { return this._undo.length > 0; }
+  canRedo() { return this._redo.length > 0; }
+
+  _serialize() {
+    return JSON.stringify({
+      tasks: this.tasks.map((t) => t.toJSON()),
+      completionLog: this.completionLog,
+      whiteboard: this.whiteboard,
+    });
+  }
+
+  _emitHistory(deleted = null) {
+    const info = { canUndo: this.canUndo(), canRedo: this.canRedo(), deleted };
+    this.historyFns.forEach((fn) => fn(info));
+  }
+
+  // Called on every save. opts.history === false → not an undo step (e.g. calendar sync).
+  // opts.coalesce = key → consecutive saves with the same key (typing in one line) merge.
+  _recordHistory({ history = true, coalesce = null } = {}) {
+    const now = this._serialize();
+    if (now === this._snap) return;
+    const prev = this._snap;
+    this._snap = now;
+    if (!history) return;
+
+    const t = Date.now();
+    const merge = (coalesce && coalesce === this._lastKey) ||
+                  (!coalesce && !this._lastKey && t - this._lastChangeAt < CHAIN_MS);
+    if (!merge || this._undo.length === 0) {
+      this._undo.push(prev);
+      if (this._undo.length > UNDO_LIMIT) this._undo.shift();
+    }
+    this._redo = [];
+    this._lastKey = coalesce;
+    this._lastChangeAt = t;
+    this._emitHistory(this._describeDeletion(prev, now));
+  }
+
+  // "Deleted task “X”" etc. when something disappeared, so the UI can offer a quick Undo
+  _describeDeletion(prevJson, nowJson) {
+    try {
+      const a = JSON.parse(prevJson), b = JSON.parse(nowJson);
+      const ids = (arr) => new Set(arr.map((x) => x.id));
+      const bt = ids(b.tasks);
+      const goneTasks = a.tasks.filter((t) => !bt.has(t.id));
+      const subsOf = (tasks) => tasks.flatMap((t) => t.subtasks.map((s) => s));
+      const bs = ids(subsOf(b.tasks));
+      const goneSubs = subsOf(a.tasks.filter((t) => bt.has(t.id))).filter((s) => !bs.has(s.id));
+      const bw = ids(b.whiteboard || []);
+      const goneLines = (a.whiteboard || []).filter((l) => !bw.has(l.id) && (l.text || '').trim());
+
+      const total = goneTasks.length + goneSubs.length + goneLines.length;
+      if (total === 0) return null;
+      if (total > 1) return `Deleted ${total} items`;
+      const q = (s) => `“${(s || '').trim()}”`;
+      if (goneTasks.length) return `Deleted task ${q(goneTasks[0].name)}`;
+      if (goneSubs.length) return `Deleted subtask ${q(goneSubs[0].name)}`;
+      return `Deleted ${q(goneLines[0].text)} from the whiteboard`;
+    } catch { return null; }
+  }
+
+  undo() {
+    if (!this._undo.length) return false;
+    this._redo.push(this._snap);
+    this._restore(this._undo.pop());
+    return true;
+  }
+
+  redo() {
+    if (!this._redo.length) return false;
+    this._undo.push(this._snap);
+    if (this._undo.length > UNDO_LIMIT) this._undo.shift();
+    this._restore(this._redo.pop());
+    return true;
+  }
+
+  _restore(json) {
+    const d = JSON.parse(json);
+    this.tasks = (d.tasks || []).map((t) => new Task(t));
+    this.completionLog = d.completionLog || [];
+    this.whiteboard = d.whiteboard || [];
+    this._snap = json;
+    this._lastKey = null;
+    this._lastChangeAt = 0;
+    this._persist();
+    this._emitHistory();
+  }
+
+  _resetHistory() {
+    this._undo = [];
+    this._redo = [];
+    this._snap = this._serialize();
+    this._lastKey = null;
+    this._emitHistory();
   }
 
   getCalendarSyncEnabled() {
@@ -134,7 +242,7 @@ export class TaskStore {
       }
     }
 
-    if (changed) this._save();
+    if (changed) this._save({ history: false });   // calendar sync isn't an undoable action
     return changed;
   }
 
@@ -176,6 +284,7 @@ export class TaskStore {
         colorIndex++;
       }
       this._saveLocal();
+      this._resetHistory();   // fresh data from Drive → start a fresh undo history
       this._notify();
       this._setStatus('synced');
     } else {
@@ -207,7 +316,7 @@ export class TaskStore {
   // ---------- whiteboard (quick-capture list) ----------
   getWhiteboard() { return this.whiteboard; }
   setWhiteboard(lines) { this.whiteboard = lines; this._save(); }
-  saveWhiteboard() { this._save(); }
+  saveWhiteboard(opts) { this._save(opts); }
 
   async _saveRemote() {
   // If a save is already running, mark that another is needed and bail.
@@ -283,8 +392,14 @@ _scheduleRetry() {
     this.syncStatusFn(status);
   }
 
-  // Save locally immediately, debounce the Drive save
-  _save() {
+  // Save locally immediately, debounce the Drive save.
+  // opts: { history: false } to skip undo; { coalesce: key } to merge with the previous step
+  _save(opts) {
+    this._recordHistory(opts);
+    this._persist();
+  }
+
+  _persist() {
     this._saveLocal();
         this._notify();
 
@@ -372,7 +487,7 @@ _scheduleRetry() {
     }
 
     googleCalendar.syncEnabled = prevSync; // restore
-    this._save();
+    this._save({ history: false });
     return pushed;
   }
 
@@ -540,6 +655,18 @@ _scheduleRetry() {
     return this.completionLog;
   }
 
+  // Move a completed item to the day you actually did it (keeps its time of day).
+  // ymd = 'YYYY-MM-DD' (local). Undoable like any other change.
+  moveCompletion(index, ymd) {
+    const e = this.completionLog[index];
+    if (!e || !ymd) return;
+    const old = new Date(e.completedAt);
+    const [y, m, d] = ymd.split('-').map(Number);
+    const moved = new Date(y, m - 1, d, old.getHours(), old.getMinutes(), old.getSeconds());
+    e.completedAt = moved.toISOString();
+    this._save();
+  }
+
   setTaskNote(taskId, note) {
     const t = this.find(taskId);
     if (!t) return;
@@ -583,7 +710,7 @@ _scheduleRetry() {
     }
 
     googleCalendar.syncEnabled = prevSync;
-    this._save();
+    this._save({ history: false });
     return deleted;
   }
 

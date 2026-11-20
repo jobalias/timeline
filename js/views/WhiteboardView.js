@@ -60,7 +60,7 @@ export class WhiteboardView {
   }
   _find(id) { return this.lines.find((l) => l.id === id); }
   _index(id) { return this.lines.findIndex((l) => l.id === id); }
-  _save() { this.store.saveWhiteboard(); }
+  _save(opts) { this.store.saveWhiteboard(opts); }
 
   // the task line a subtask belongs to (null = independent)
   _parentTask(subId) {
@@ -119,7 +119,8 @@ export class WhiteboardView {
       this.lines.push({ id: newId(), kind: 'task', text: '', added: false });
     }
 
-    if (this._normalize()) this._save();
+    // structural tidy-up is part of whatever action caused it, not its own undo step
+    if (this._normalize()) this._save({ history: false });
 
     const isHidden = (l) => this.hideAdded && l.added && l.kind !== 'category';
     // keep an added task visible while it still has visible subtasks,
@@ -286,7 +287,7 @@ export class WhiteboardView {
     this.listEl.addEventListener('input', (e) => {
       if (e.target.classList.contains('wb-hours')) {
         const l = this._find(lineOf(e.target).dataset.id);
-        if (l) { l.hours = e.target.value; this._save(); }
+        if (l) { l.hours = e.target.value; this._save({ coalesce: 'hours:' + l.id }); }
         return;
       }
       if (e.target.classList.contains('wb-due-input')) return; // handled on 'change'
@@ -312,7 +313,7 @@ export class WhiteboardView {
       l.text = v;
       const addBtn = row.querySelector('.wb-add');
       if (addBtn) addBtn.disabled = !v.trim();
-      this._save();
+      this._save({ coalesce: 'text:' + l.id });   // typing in one line = one undo step
     });
 
     this.listEl.addEventListener('keydown', (e) => {

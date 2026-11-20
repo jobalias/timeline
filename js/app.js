@@ -12,6 +12,7 @@ import { CalendarPicker } from './views/CalendarPicker.js';
 import { PlannerView } from './views/PlannerView.js';
 import { ProgressView } from './views/ProgressView.js';
 import { WhiteboardView } from './views/WhiteboardView.js';
+import { UndoControls } from './views/UndoControls.js';
 import { escapeHtml } from './utils.js'; 
 import { Task } from './models/Task.js'; 
 
@@ -104,6 +105,7 @@ class App {
     });
 
     this.whiteboardView = new WhiteboardView(this.store, this.taskModal);
+    this.undoControls = new UndoControls(this.store);
 
     this.grid = new GridView(this.store, {
       onEditTask: (id) => this.taskModal.openEdit(id),
