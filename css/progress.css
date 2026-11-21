@@ -91,6 +91,10 @@
 }
 .prog-hours-bar span { display: block; height: 100%; border-radius: 3px; background: var(--green); }
 .prog-hours-num { font-size: 12px; font-weight: 700; color: var(--green); min-width: 28px; text-align: right; }
+/* over 8h: orange → red (--over: 0% at 8h … 100% at 12h+) */
+.prog-hours-day.is-over { --over-color: color-mix(in srgb, var(--danger) var(--over), var(--c-orange)); }
+.prog-hours-day.is-over .prog-hours-bar span { background: var(--over-color); }
+.prog-hours-day.is-over .prog-hours-num { color: var(--over-color); }
 .prog-hours-day.is-empty { justify-content: center; }
 .prog-hours-day.is-empty .prog-hours-num { color: var(--c-gray-350); font-weight: 400; text-align: center; }
 

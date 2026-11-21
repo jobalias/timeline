@@ -68,13 +68,9 @@ export class ProgressView {
       byDay.get(key).push(e);
     });
 
-    // busiest day in view → scales the little hours bar
-    let maxHours = 0;
     const hoursOf = (entries) => entries.reduce((s, e) => s + (parseFloat(e.hoursSpent) || 0), 0);
-    for (let i = 0; i < DAYS_TO_SHOW; i++) {
-      const d = new Date(rangeStart); d.setDate(d.getDate() + i);
-      maxHours = Math.max(maxHours, hoursOf(byDay.get(ymdLocal(d)) || []));
-    }
+    // bar is full at 8h; past that it shifts orange (8h) → red (12h+)
+    const FULL_DAY = 8, RED_AT = 12;
 
     const prevScroll = this.weekEl.scrollLeft;
     this.weekEl.innerHTML = '';
@@ -92,9 +88,14 @@ export class ProgressView {
       if (sameDay(day, today)) col.classList.add('prog-today');
       if (day > today) col.classList.add('prog-future');
 
-      const pct = maxHours > 0 ? Math.max(6, Math.round((hours / maxHours) * 100)) : 0;
+      const pct = Math.max(6, Math.min(100, Math.round((hours / FULL_DAY) * 100)));
+      const over = hours > FULL_DAY
+        ? Math.round(Math.min(1, (hours - FULL_DAY) / (RED_AT - FULL_DAY)) * 100)
+        : null;   // 0 = orange … 100 = red
+      const overStyle = over === null ? '' : ` style="--over:${over}%"`;
       const hoursRow = hours > 0
-        ? `<div class="prog-hours-day" title="${fmtHours(hours)} hours logged">
+        ? `<div class="prog-hours-day${over === null ? '' : ' is-over'}"${overStyle}
+               title="${fmtHours(hours)} hours logged${over === null ? '' : ' — over 8h'}">
              <div class="prog-hours-bar"><span style="width:${pct}%"></span></div>
              <div class="prog-hours-num">${fmtHours(hours)}h</div>
            </div>`
