@@ -37,6 +37,8 @@
     border-left: 4px solid var(--task-color);
     position: static;                 /* undo sticky from desktop */
     min-width: 0;
+    max-width: none;                  /* undo desktop label-column cap → full-width header */
+    border-right: none;
   }
   .m-task .task-title {
     flex: 1; min-width: 0;
@@ -73,6 +75,18 @@
   .m-subtask .sched-btn { font-size: 14px; padding: 3px 6px; }
 
   .m-subtask .done-check { width: 15px; height: 15px; }
+
+  /* checkbox + 🏐 for mouse/trackpad (narrow laptop window); touch screens swipe instead */
+  .m-subtask .m-click-only { flex-shrink: 0; }
+  .m-subtask .done-check.m-click-only { width: 16px; height: 16px; margin: 0 2px 0 4px; accent-color: var(--accent); cursor: pointer; }
+  .m-subtask .ball-dot.m-click-only { background: transparent; border: none; box-shadow: none; opacity: 0.45; font-size: 14px; padding: 2px 4px; }
+  .m-subtask .ball-dot.m-click-only:hover { opacity: 1; transform: none; }
+  .m-subtask .ball-dot.m-click-only.ball-waiting { opacity: 1; }
+  .m-subtask[data-waiting="1"] .m-wait-mark { display: none; }   /* the 🏓 button shows it instead */
+  @media (hover: none) and (pointer: coarse) {
+    .m-subtask .m-click-only { display: none; }
+    .m-subtask[data-waiting="1"] .m-wait-mark { display: inline; }
+  }
   .m-subtask .ball-dot { opacity: 1; font-size: 13px; padding: 2px; }
   .m-wait-mark { font-size: 13px; flex-shrink: 0; }
   .m-subtask.subtask-done .m-sub-name { text-decoration: line-through; color: var(--muted); }

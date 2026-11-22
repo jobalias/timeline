@@ -19,7 +19,7 @@ export class GridView {
     // "⏱ Under X h" highlight — null = off
     this.hoursFilter = null;
 
-    this.isMobile = window.innerWidth < 768;
+    this.isMobile = window.innerWidth <= 768;   // same breakpoint as mobile.css
     this.effectiveDays = this.isMobile ? 10 : DAYS_SHOWN;
     const halfWindow = Math.floor(this.effectiveDays / 2);
     this.windowStart = startOfDay(new Date());
@@ -102,7 +102,9 @@ export class GridView {
       // ignore interactive controls
       if (e.target.closest('.sched-btn') ||
           e.target.closest('.task-edit') ||
-          e.target.closest('.task-del')) {
+          e.target.closest('.task-del') ||
+          e.target.closest('.done-check') ||
+          e.target.closest('.ball-dot')) {
         return;
       }
 
@@ -256,7 +258,7 @@ export class GridView {
   // ----- Re-render when crossing the mobile breakpoint -----
   _bindResize() {
     window.addEventListener('resize', () => {
-      const nowMobile = window.innerWidth < 768;
+      const nowMobile = window.innerWidth <= 768;
       if (nowMobile !== this.isMobile) {
         this.isMobile = nowMobile;
         this.render();
@@ -668,9 +670,19 @@ export class GridView {
     const dueChip = this._mobileDueChip(st, today);
     const waitMark = waiting ? '<span class="m-wait-mark" title="Waiting">🏓</span>' : '';
 
+    // mouse/trackpad users (e.g. a narrow laptop window) can't swipe → give them
+    // a checkbox and a 🏐/🏓 button. Hidden on touch screens (css), where swipe works.
+    const check = `<input type="checkbox" class="done-check m-click-only"
+        data-task-id="${task.id}" data-sub-index="${si}" ${st.done ? 'checked' : ''}
+        title="${st.done ? 'Mark not done' : 'Mark done'}" aria-label="Done">`;
+    const ball = st.done ? '' : `<button class="ball-dot m-click-only${waiting ? ' ball-waiting' : ''}"
+        data-task-id="${task.id}" data-sub-index="${si}"
+        title="${waiting ? 'Ball in their court — click to restore' : 'Waiting on someone? Click to minimize'}">${waiting ? '🏓' : '🏐'}</button>`;
+
     return `
       <div class="${rowCls}" data-task-id="${task.id}" data-sub-index="${si}" data-done="${st.done ? '1' : '0'}" data-waiting="${waiting ? '1' : '0'}">
         <div class="label-col m-sub-label">
+          ${check}
           ${noteBadge}
           ${waitMark}
           <span class="m-sub-name" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
@@ -680,6 +692,7 @@ export class GridView {
           ${dueChip}
           ${st.done ? '' : `<button class="${clockCls}" data-task-id="${task.id}"
             data-sub-index="${si}" ${clockDisabled}>⏰</button>`}
+          ${ball}
         </div>
       </div>`;
   }
