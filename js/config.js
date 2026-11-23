@@ -1,7 +1,6 @@
-// ====== GOOGLE CREDENTIALS — paste yours here ======
+// ---------- Google API credentials ----------
 export const CLIENT_ID = '400372170176-1ebitf2c7vl6tlts5l2iigjbrncrgddl.apps.googleusercontent.com';
 export const API_KEY = 'AIzaSyDoUW_TbSyolodDo8hHmKUidjqDakvs1Co';
-// ====================================================
 
 export const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
@@ -16,7 +15,6 @@ export const DISCOVERY_DOCS = [
 
 export const DISCOVERY_DOC = DISCOVERY_DOCS[0];
 
+// ---------- grid window ----------
 export const DAYS_SHOWN = 30;
 export const WINDOW_LOOKBACK = 20; // days shown before today
-
-// ====================================================

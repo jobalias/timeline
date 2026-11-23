@@ -1,5 +1,15 @@
-import { startOfDay, sameDay, parseYmd } from '../utils.js';
+import { startOfDay, sameDay, parseYmd } from '../core/dates.js';
+import { escapeHtml } from '../utils.js';
 import { cssVar } from '../theme.js';
+
+const HOUR_MS = 3600000;
+const NOW_LINE_INTERVAL_MS = 60000;
+const DEFAULT_SCROLL_HOUR = 8;
+const MIN_BUSY_PX = 18;
+const MIN_BLOCK_PX = 20;
+
+const hourPx = () => cssVar('--dayview-hour-px', 44);
+const hoursIntoDay = (date) => date.getHours() + date.getMinutes() / 60;
 
 export class DayView {
   constructor(store, googleCalendar, settings) {
@@ -13,159 +23,165 @@ export class DayView {
     this.titleEl = document.getElementById('dayViewTitle');
     this.bodyEl = document.getElementById('dayViewBody');
 
-    document.getElementById('dayPrev')
-      .addEventListener('click', () => this._shiftDay(-1));
-    document.getElementById('dayNext')
-      .addEventListener('click', () => this._shiftDay(1));
-    document.getElementById('dayToday')
-      .addEventListener('click', () => this._goToday());
+    document.getElementById('dayPrev').addEventListener('click', () => this._shiftDay(-1));
+    document.getElementById('dayNext').addEventListener('click', () => this._shiftDay(1));
+    document.getElementById('dayToday').addEventListener('click', () => this._goToday());
   }
+
+  // ----- Public API -----
+
+  async render() {
+    this._renderTitle();
+    this.busyEvents = await this._fetchBusyEvents();
+    const { taskBlocks, blockEventIds } = this._collectTaskBlocks();
+    this._renderGrid(taskBlocks, blockEventIds);
+  }
+
+  startNowLineTimer() {
+    this.stopNowLineTimer();
+    this._nowTimer = setInterval(() => this._updateNowLine(), NOW_LINE_INTERVAL_MS);
+  }
+
+  stopNowLineTimer() {
+    if (!this._nowTimer) return;
+    clearInterval(this._nowTimer);
+    this._nowTimer = null;
+  }
+
+  // ----- Navigation -----
 
   async _shiftDay(delta) {
     this.currentDay.setDate(this.currentDay.getDate() + delta);
     await this.render();
   }
+
   async _goToday() {
     this.currentDay = startOfDay(new Date());
     await this.render();
   }
 
-  async render() {
-    // title
-    const opts = { weekday: 'long', month: 'short', day: 'numeric' };
-    const isToday = sameDay(this.currentDay, startOfDay(new Date()));
-    this.titleEl.textContent =
-      (isToday ? 'Today · ' : '') + this.currentDay.toLocaleDateString(undefined, opts);
+  _isViewingToday() {
+    return sameDay(this.currentDay, startOfDay(new Date()));
+  }
 
-    // fetch Google busy events for this day (gray blocks)
-    if (this.gcal && this.gcal.isAuthed) {
-      try {
-        const dayStart = startOfDay(this.currentDay);
-        const dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayEnd.getDate() + 1);
-        const calIds = this.settings.getSelectedCalendars();
-        this.busyEvents = await this.gcal.getEvents(dayStart, dayEnd, calIds);
-      } catch (e) {
-        this.busyEvents = [];
-      }
-    } else {
-      this.busyEvents = [];
+  // ----- Data -----
+
+  async _fetchBusyEvents() {
+    if (!this.gcal || !this.gcal.isAuthed) return [];
+    try {
+      const dayStart = startOfDay(this.currentDay);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      return await this.gcal.getEvents(dayStart, dayEnd, this.settings.getSelectedCalendars());
+    } catch {
+      return [];
     }
+  }
 
-    // collect task blocks for this day + track their eventIds
+  // Returns this day's task blocks, plus the Google event ids of every app block
+  // (any day) so those events aren't drawn a second time as gray busy blocks
+  _collectTaskBlocks() {
     const taskBlocks = [];
-    const blockEventIds = new Set();   // ← eventIds already shown as app blocks
+    const blockEventIds = new Set();
+
     this.store.getAll().forEach((task) => {
       task.subtasks.forEach((st) => {
         st.blocks.forEach((b) => {
-          if (b.eventId) blockEventIds.add(b.eventId); // track for dedup
-          if (b.date && sameDay(parseYmd(b.date), this.currentDay)) {
-            taskBlocks.push({
-              taskName: task.name,
-              subName: st.name,
-              color: task.color,
-              start: b.start,
-              hours: b.hoursNum,
-              done: st.done,
-            });
-          }
+          if (b.eventId) blockEventIds.add(b.eventId);
+          if (!b.date || !sameDay(parseYmd(b.date), this.currentDay)) return;
+          taskBlocks.push({
+            taskName: task.name,
+            subName: st.name,
+            color: task.color,
+            start: b.start,
+            hours: b.hoursNum,
+            done: st.done,
+          });
         });
       });
     });
 
-    this._renderGrid(taskBlocks, blockEventIds);
+    return { taskBlocks, blockEventIds };
+  }
+
+  // ----- Rendering -----
+
+  _renderTitle() {
+    const date = this.currentDay.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    this.titleEl.textContent = (this._isViewingToday() ? 'Today · ' : '') + date;
   }
 
   _renderGrid(taskBlocks, blockEventIds = new Set()) {
-    const HOUR_PX = cssVar('--dayview-hour-px', 44);
+    const px = hourPx();
     let html = '<div class="dv-grid">';
 
-    // hour lines + labels
     for (let h = 0; h < 24; h++) {
-      html += `<div class="dv-hour" style="top:${h * HOUR_PX}px;">
+      html += `<div class="dv-hour" style="top:${h * px}px;">
                  <span class="dv-hour-label">${this._fmtHour(h)}</span>
                </div>`;
     }
 
-    // gray busy events — SKIP ones that are already shown as app blocks
-    this.busyEvents.forEach((ev) => {
-      if (blockEventIds.has(ev.id)) return;   
-      const top = (ev.start.getHours() + ev.start.getMinutes() / 60) * HOUR_PX;
-      const height = Math.max(18, ((ev.end - ev.start) / 3600000) * HOUR_PX);
-      html += `<div class="dv-busy" style="top:${top}px;height:${height}px;"
-                    title="${this._esc(ev.title)}">${this._esc(ev.title)}</div>`;
-    });
+    this.busyEvents
+      .filter((ev) => !blockEventIds.has(ev.id))
+      .forEach((ev) => { html += this._renderBusyEvent(ev, px); });
 
-    // colored task blocks (unchanged)
-    taskBlocks.forEach((b) => {
-      const [h, m] = b.start.split(':').map(Number);
-      const top = (h + m / 60) * HOUR_PX;
-      const height = Math.max(20, b.hours * HOUR_PX);
-      const opacity = b.done ? 0.4 : 1;
-      html += `<div class="dv-block"
-                    style="top:${top}px;height:${height}px;
-                           background:${b.color};opacity:${opacity};"
-                    title="${this._esc(b.taskName)}: ${this._esc(b.subName)}">
-                 <div class="dv-block-title">${this._esc(b.subName)}</div>
-                 <div class="dv-block-sub">${this._esc(b.taskName)} · ${b.hours}h</div>
-               </div>`;
-    });
+    taskBlocks.forEach((b) => { html += this._renderTaskBlock(b, px); });
 
-    if (sameDay(this.currentDay, startOfDay(new Date()))) {
-      const now = new Date();
-      const nowTop = (now.getHours() + now.getMinutes() / 60) * HOUR_PX;
-      html += `<div class="dv-now-line" style="top:${nowTop}px;"></div>`;
+    if (this._isViewingToday()) {
+      html += `<div class="dv-now-line" style="top:${hoursIntoDay(new Date()) * px}px;"></div>`;
     }
 
     html += '</div>';
     this.bodyEl.innerHTML = html;
-    this.bodyEl.scrollTop = 8 * HOUR_PX;
+    this.bodyEl.scrollTop = DEFAULT_SCROLL_HOUR * px;
   }
 
+  _renderBusyEvent(ev, px) {
+    const top = hoursIntoDay(ev.start) * px;
+    const height = Math.max(MIN_BUSY_PX, ((ev.end - ev.start) / HOUR_MS) * px);
+    const title = escapeHtml(ev.title);
+    return `<div class="dv-busy" style="top:${top}px;height:${height}px;"
+                  title="${title}">${title}</div>`;
+  }
+
+  _renderTaskBlock(b, px) {
+    const [h, m] = b.start.split(':').map(Number);
+    const top = (h + m / 60) * px;
+    const height = Math.max(MIN_BLOCK_PX, b.hours * px);
+    const opacity = b.done ? 0.4 : 1;
+    return `<div class="dv-block"
+                  style="top:${top}px;height:${height}px;
+                         background:${b.color};opacity:${opacity};"
+                  title="${escapeHtml(b.taskName)}: ${escapeHtml(b.subName)}">
+               <div class="dv-block-title">${escapeHtml(b.subName)}</div>
+               <div class="dv-block-sub">${escapeHtml(b.taskName)} · ${b.hours}h</div>
+             </div>`;
+  }
+
+  // Moves the now-line, adding it if we navigated back to today or removing it if we left
   _updateNowLine() {
     const line = this.bodyEl.querySelector('.dv-now-line');
-    const isToday = sameDay(this.currentDay, startOfDay(new Date()));
 
-    if (!isToday) {
-      if (line) line.remove();   // moved off today → remove any stale line
+    if (!this._isViewingToday()) {
+      line?.remove();
       return;
     }
 
-    const HOUR_PX = cssVar('--dayview-hour-px', 44);
-    const now = new Date();
-    const top = (now.getHours() + now.getMinutes() / 60) * HOUR_PX;
-
+    const top = `${hoursIntoDay(new Date()) * hourPx()}px`;
     if (line) {
-      line.style.top = `${top}px`;
-    } else {
-      // today but no line yet (e.g. navigated back to today) → add one
-      const el = document.createElement('div');
-      el.className = 'dv-now-line';
-      el.style.top = `${top}px`;
-      const grid = this.bodyEl.querySelector('.dv-grid');
-      if (grid) grid.appendChild(el);
+      line.style.top = top;
+      return;
     }
-  }
 
-  startNowLineTimer() {
-    this.stopNowLineTimer();   // avoid duplicates
-    this._nowTimer = setInterval(() => this._updateNowLine(), 60000);
-  }
-
-  stopNowLineTimer() {
-    if (this._nowTimer) {
-      clearInterval(this._nowTimer);
-      this._nowTimer = null;
-    }
+    const el = document.createElement('div');
+    el.className = 'dv-now-line';
+    el.style.top = top;
+    this.bodyEl.querySelector('.dv-grid')?.appendChild(el);
   }
 
   _fmtHour(h) {
     if (h === 0) return '12 AM';
     if (h === 12) return '12 PM';
     return h < 12 ? `${h} AM` : `${h - 12} PM`;
-  }
-  _esc(s) {
-    return String(s).replace(/[&<>"']/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 }

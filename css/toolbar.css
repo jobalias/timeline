@@ -1,0 +1,167 @@
+/* ============================================================
+   TOOLBAR — The Grid page's top bar: settings/refresh group,
+   + Add Task, week navigation, and the status/account cluster.
+   (The ⏱ hours filter lives in hoursfilter.css.)
+   ============================================================ */
+
+/* ---- Bar + groups ---- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;   /* between groups */
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tb-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;   /* within a group */
+}
+
+.toolbar #addTaskBtn { margin-left: 8px; }
+
+.tb-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tb-check input { accent-color: var(--accent); }
+
+/* ---- Segmented control — buttons joined into one unit ---- */
+.tb-segment {
+  display: inline-flex;
+  margin: 0;
+}
+.tb-segment button {
+  border-radius: 0;
+  margin-left: -1px;   /* collapse shared borders */
+  box-shadow: none;
+  font-weight: 500;
+}
+.tb-segment button:first-child {
+  border-radius: 10px 0 0 10px;
+  margin-left: 0;
+}
+.tb-segment button:last-child { border-radius: 0 10px 10px 0; }
+.tb-segment button:hover {
+  transform: none;
+  background: var(--c-gray-50);
+  z-index: 1;
+}
+
+/* ---- Week navigation (← Today →) ---- */
+/* Must come after .tb-segment: the nav is both .tb-segment and .grid-nav */
+.grid-nav {
+  display: flex;
+  gap: var(--gap-sm);
+  align-items: center;
+  margin-bottom: var(--gap-md);
+}
+.grid-nav button {
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+}
+#gridToday { font-weight: 600; }
+
+.toolbar .grid-nav-bar {
+  display: flex;
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 0;
+}
+.toolbar .grid-nav { margin-bottom: 0; }
+.toolbar .grid-nav button { padding: 9px 14px; }
+
+/* ---- Right-aligned status + account cluster ---- */
+.tb-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-status {
+  color: var(--muted);
+  margin: 0;
+  font-size: 13px;
+}
+.auth-status.connected { color: var(--green); }
+
+/* ---- Settings + refresh ---- */
+#settingsBtn {
+  font-size: 16px;
+  padding: 8px 12px;
+}
+#refreshBtn { font-size: 13px; }
+#refreshBtn.syncing {
+  opacity: 0.6;
+  cursor: default;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   Small screens (≤600px)
+   ============================================================ */
+@media (max-width: 600px) {
+  .toolbar button { flex: 1 1 auto; }
+}
+
+/* ============================================================
+   Phone (≤768px) — one tidy row: ⚙️ 🔄 [+ Add Task], status below
+   ============================================================ */
+@media (max-width: 768px) {
+  .grid-nav-bar { display: none !important; }
+
+  .toolbar {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .toolbar .tb-group { order: 0; }
+  .toolbar #addTaskBtn {
+    flex: 1 1 auto;
+    order: 1;
+    margin: 0;
+    height: clamp(36px, 10vw, 44px);
+    font-size: clamp(13px, 3.8vw, 16px);
+    padding: 0 clamp(10px, 3vw, 18px);
+  }
+
+  /* Status row: its own, quieter line below */
+  .tb-right {
+    order: 2;
+    width: 100%;
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+  .tb-right .sync-badge, .tb-right .auth-status { font-size: 12px; }
+  .tb-right .ghost-btn {
+    font-size: 13px;
+    padding: 4px 8px;
+  }
+
+  /* Square icon buttons — also sizes the planner's ☰ ‹ › (they are .icon-btn) */
+  .planner-menu-btn,
+  .planner-nav-arrow,
+  .toolbar #settingsBtn,
+  .toolbar #refreshBtn,
+  .icon-btn {
+    width: clamp(36px, 10vw, 44px);
+    height: clamp(36px, 10vw, 44px);
+    font-size: clamp(16px, 4.5vw, 20px);
+    padding: 0;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+}

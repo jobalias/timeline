@@ -1,10 +1,8 @@
-/* ===== GRID VIEW (compact) ===== */
-
-/* ---- Label column width control (single source of truth) ---- */
-:root {
-  --label-max: 320px;   /* cap: names longer than this truncate */
-  --label-min: 180px;   /* floor: column never narrower than this */
-}
+/* ============================================================
+   GRID VIEW — Task/subtask rows against a scrolling day grid
+   (desktop), and the card list that replaces it on phones.
+   Split layout with the day view: dayview.css. Toolbar: toolbar.css.
+   ============================================================ */
 
 .grid-wrap {
   overflow: auto;
@@ -18,22 +16,34 @@
 .grid-wrap td:not(.label-col),
 .grid-wrap th:not(.label-col) { contain: layout style; }
 
-.main-split .grid-wrap { flex: 2 1 0; min-width: 0; overflow: auto; }
-
 .grid-col {
-  flex: 2 1 0; min-width: 0; position: relative;
-  display: flex; flex-direction: column;
+  flex: 2 1 0;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
-.main-split .grid-col .grid-wrap { flex: 1 1 auto; min-width: 0; }
+.main-split .grid-col .grid-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
-table { border-collapse: collapse; width: max-content; }
-th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
+table {
+  border-collapse: collapse;
+  width: max-content;
+}
+th, td {
+  text-align: center;
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
 
-/* ---- Label column: dynamic between min and max ---- */
+/* ---- Label column (sized between --label-min and --label-max, see tokens.css) ---- */
 .label-col {
   text-align: left;
   padding: 4px 12px;
-  position: sticky; left: 0;
+  position: sticky;
+  left: 0;
   background: var(--panel);
   z-index: 2;
   min-width: var(--label-min);
@@ -41,7 +51,7 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
   border-right: 1px solid var(--border);
 }
 
-/* ===== Row tinting + spine ===== */
+/* ---- Row tinting + colour spine ---- */
 .task-tr .label-col,
 .subtask-tr .label-col { box-shadow: inset 3px 0 0 0 var(--task-color); }
 
@@ -59,169 +69,579 @@ th, td { text-align: center; font-size: var(--fs-small); white-space: nowrap; }
 
 /* Continuous horizontal lines */
 .task-tr .label-col, .task-tr .cell,
-.subtask-tr .label-col, .subtask-tr .cell {
-  border-bottom: 1px solid var(--cell-border);
-}
+.subtask-tr .label-col, .subtask-tr .cell { border-bottom: 1px solid var(--cell-border); }
 
-/* ===== Task header row ===== */
+/* ---- Task header row ---- */
 .task-name {
-  font-weight: 700; font-size: var(--fs-body);
-  display: flex; align-items: center; gap: var(--gap-sm);
+  font-weight: 700;
+  font-size: var(--fs-body);
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
 }
 .task-title {
   flex: 1 1 auto;
-  min-width: 0;                  /* allow shrink → ellipsis works */
+  min-width: 0;   /* allow shrink → ellipsis works */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .task-btns {
-  display: flex; gap: 2px; flex-shrink: 0;
-  opacity: 0; transition: opacity 0.15s;
-  margin-left: auto;             /* push buttons to the right edge */
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+  margin-left: auto;   /* push buttons to the right edge */
 }
 .task-name:hover .task-btns { opacity: 1; }
 .task-edit, .task-del {
-  padding: 1px 5px; font-size: 11px; border-radius: 5px; line-height: 1;
-  border: none; background: transparent;
+  padding: 1px 5px;
+  font-size: 11px;
+  border-radius: 5px;
+  line-height: 1;
+  border: none;
+  background: transparent;
 }
 .task-edit:hover { background: var(--neutral-bg); }
 .task-del:hover { background: var(--del-hover-bg); }
-.task-done .task-title { color: var(--muted); font-style: italic; }
+.task-done .task-title {
+  color: var(--muted);
+  font-style: italic;
+}
 
-/* ===== Subtask row ===== */
+/* ---- Subtask row ---- */
 .subtask-name { padding: 0; }
 .st-row {
-  display: flex; align-items: center; gap: 5px;
-  padding: 1px 0 1px 10px; min-height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 0 1px 10px;
+  min-height: 22px;
 }
 
 .st-name {
-  flex: 1 1 auto; min-width: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-size: var(--fs-subtask); color: var(--text);
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--fs-subtask);
+  color: var(--text);
 }
 .st-controls {
   flex: 0 0 auto;
-  display: flex; align-items: center; gap: 5px;
-  margin-left: auto;        /* pin cluster right */
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;   /* pin cluster right */
 }
 .st-lead {
   flex: 0 0 15px;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.st-lead .done-check { margin: 0; width: 15px; height: 15px; }
-.subtask-done .st-name { text-decoration: line-through; color: var(--muted); }
+.st-lead .done-check { margin: 0; }
+.subtask-done .st-name {
+  text-decoration: line-through;
+  color: var(--muted);
+}
 
 .due-today-badge {
-  flex: 0 0 16px; width: 16px; text-align: center;
-  font-size: 12px; line-height: 1;
+  flex: 0 0 16px;
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1;
 }
-.ball-dot, .sched-btn { flex-shrink: 0; }
 
 .done-check {
-  width: 15px; height: 15px; cursor: pointer;
-  flex-shrink: 0; accent-color: var(--green);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--green);
 }
 
 .ball-dot {
-  background: transparent; border: none; font-size: 11px; line-height: 1;
-  cursor: pointer; padding: 1px; border-radius: 5px;
-  opacity: 0; transition: opacity 0.15s; flex-shrink: 0;
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 1px;
+  border-radius: 5px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
 }
 
-.check-spacer { width: 15px; height: 15px; display: block; }
+.check-spacer {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
 
 .st-row:hover .ball-dot { opacity: 0.5; }
-.ball-dot:hover { opacity: 1 !important; background: var(--hover-row); }
-.ball-dot.ball-waiting { opacity: 1; }   
-/* Note indicator */
-.note-dot { position: absolute; top: 3px; left: 6px; font-size: 9px; pointer-events: none; }
+.ball-dot:hover {
+  opacity: 1 !important;
+  background: var(--hover-row);
+}
+.ball-dot.ball-waiting { opacity: 1; }
+
+.note-dot {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-size: 9px;
+  pointer-events: none;
+}
 .note-dot::before { content: var(--icon-note); }
+
+/* Spacers hold the place of a missing ball/clock button so rows stay aligned */
 .ball-spacer {
   flex: 0 0 auto;
-  width: 15px;   /* ≈ ball-dot width (font 11px + padding 1px*2) — measure & match */
+  width: 15px;
 }
+
 /* Clock button */
 .sched-btn {
-  padding: 1px 5px; font-size: 11px; border-radius: 5px; flex-shrink: 0;
-  border: 1px solid transparent; line-height: 1.4;
+  padding: 1px 5px;
+  font-size: 11px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  line-height: 1.4;
 }
 .sched-spacer {
   flex-shrink: 0;
-  /* match the clock button's total width: padding(1px 5px) + font + border */
-  width: 1px;    /* tune to match your ⏰ button width */
+  width: 1px;
 }
-.clock-pending { background: var(--clock-pending-bg); border-color: transparent; }
+.clock-pending {
+  background: var(--clock-pending-bg);
+  border-color: transparent;
+}
 .clock-pending:hover { background: var(--clock-pending-hover); }
-.clock-full { background: var(--green); color: var(--c-white); border-color: transparent; }
-.clock-done { background: transparent; opacity: 0.3; }
+.clock-full {
+  background: var(--green);
+  color: var(--c-white);
+  border-color: transparent;
+}
+.clock-done {
+  background: transparent;
+  opacity: 0.3;
+}
 
-/* Due-today */
+/* Due today */
 .subtask-name.due-today { background: var(--panel); }
-.subtask-name.due-today .st-name { font-weight: 600; color: var(--danger); }
+.subtask-name.due-today .st-name {
+  font-weight: 600;
+  color: var(--danger);
+}
 
-/* ===== Day header + cells ===== */
-.day-head { padding: 3px 2px; min-width: var(--grid-cell-size); color: var(--muted); font-weight: 500; }
-.dow { font-size: var(--fs-tiny); display: block; color: var(--muted); }
+/* ---- Day headers + cells ---- */
+.day-head {
+  padding: 3px 2px;
+  min-width: var(--grid-cell-size);
+  color: var(--muted);
+  font-weight: 500;
+}
+.dow {
+  font-size: var(--fs-tiny);
+  display: block;
+  color: var(--muted);
+}
 
 .cell {
-  width: var(--grid-cell-size); height: 22px;
-  border: 1px solid var(--cell-border); position: relative;
+  width: var(--grid-cell-size);
+  height: 22px;
+  border: 1px solid var(--cell-border);
+  position: relative;
 }
 .cell.today { box-shadow: inset 0 0 0 2px var(--today); }
-.cell .square { position: absolute; inset: 6px; border-radius: 4px; }
-.cell.due .square { background: transparent; display: flex; align-items: center; justify-content: center; }
-.cell.due .square::after { content: "✕"; color: var(--danger); font-weight: 700; font-size: 15px; }
+.cell .square {
+  position: absolute;
+  inset: 6px;
+  border-radius: 4px;
+}
+.cell.due .square {
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cell.due .square::after {
+  content: "✕";
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 15px;
+}
 .cell-done .square { opacity: 0.3; }
 
 .hours-centered {
-  display: flex; align-items: center; justify-content: center;
-  width: 100%; height: 100%; font-size: 11px; font-weight: 700; color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
 }
-.cell-done .hours-centered { color: var(--muted); opacity: 0.5; }
+.cell-done .hours-centered {
+  color: var(--muted);
+  opacity: 0.5;
+}
 
-/* ===== Sticky headers ===== */
+/* ---- Sticky headers ---- */
 .month-head {
-  padding: 5px 4px; font-size: var(--fs-small); font-weight: 700; color: var(--muted);
-  background: var(--panel); border-left: 1px solid var(--border);
+  padding: 5px 4px;
+  font-size: var(--fs-small);
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--panel);
+  border-left: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 5; text-align: left; overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  text-align: left;
+  overflow: hidden;
 }
-.month-label { display: inline-block; padding-left: 6px; white-space: nowrap; will-change: transform; }
-.month-corner { position: sticky; left: 0; top: 0; z-index: 7; background: var(--panel); border-bottom: 1px solid var(--border); }
-.grid-wrap .day-head { position: sticky; top: 30px; z-index: 4; background: var(--panel); }
+.month-label {
+  display: inline-block;
+  padding-left: 6px;
+  white-space: nowrap;
+  will-change: transform;
+}
+.month-corner {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 7;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.grid-wrap .day-head {
+  position: sticky;
+  top: 30px;
+  z-index: 4;
+  background: var(--panel);
+}
 .grid-wrap .day-head.weekend { background: var(--weekend-bg); }
-.grid-wrap .day-head.today   { background: var(--today); color: var(--c-black); border-radius: 5px; }
-.grid-wrap thead .label-col  { position: sticky; left: 0; top: 30px; z-index: 6; background: var(--panel); }
-
-/* ===== Grid nav ===== */
-.grid-nav { display: flex; gap: var(--gap-sm); align-items: center; margin-bottom: var(--gap-md); }
-.grid-nav button { font-size: 13px; padding: 6px 14px; border-radius: var(--radius); }
-#gridToday { font-weight: 600; }
-
-@media (max-width: 600px) {
-  .label-col { min-width: var(--grid-label-width-mobile); max-width: none; }
-  .day-head { min-width: var(--grid-cell-size-mobile); }
-  .cell { width: var(--grid-cell-size-mobile); height: var(--grid-cell-size-mobile); }
+.grid-wrap .day-head.today {
+  background: var(--today);
+  color: var(--c-black);
+  border-radius: 5px;
+}
+.grid-wrap thead .label-col {
+  position: sticky;
+  left: 0;
+  top: 30px;
+  z-index: 6;
+  background: var(--panel);
 }
 
-/* ===== Toolbar ===== */
-.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.tb-group { display: flex; gap: 6px; }
-.toolbar #addTaskBtn { margin-left: 8px; }
-.toolbar .grid-nav-bar { display: flex; margin-left: auto; margin-right: auto; margin-bottom: 0; }
-.toolbar .grid-nav { margin-bottom: 0; }
-.toolbar .grid-nav button { padding: 9px 14px; }
-.tb-right { display: flex; align-items: center; gap: 12px; }
-
-/* "Show completed" */
+/* ---- "Show completed" toggle ---- */
 .show-completed-mini {
-  position: absolute; top: 10px; left: 16px; z-index: 8;
-  display: flex; align-items: center; gap: 5px; margin: 0;
-  font-size: 11px; color: var(--muted);
-  background: var(--panel); padding: 3px 8px; border-radius: 6px;
-  cursor: pointer; white-space: nowrap;
+  position: absolute;
+  top: 10px;
+  left: 16px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
   box-shadow: 0 1px 3px var(--c-shadow-10);
 }
-.show-completed-mini input { width: 13px; height: 13px; accent-color: var(--accent); margin: 0; }
+.show-completed-mini input {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+/* ============================================================
+   Small screens (≤600px) — tighter desktop table
+   ============================================================ */
+@media (max-width: 600px) {
+  .label-col {
+    min-width: var(--grid-label-width-mobile);
+    max-width: none;
+  }
+  .day-head { min-width: var(--grid-cell-size-mobile); }
+  .cell {
+    width: var(--grid-cell-size-mobile);
+    height: var(--grid-cell-size-mobile);
+  }
+}
+
+/* ============================================================
+   Phone (≤768px) — the table becomes a card list (.mobile-list)
+   with swipe gestures on subtask rows.
+   Keep this block AFTER the ≤600px one: .m-sub-label is also a
+   .label-col and must win the min-width tie.
+   ============================================================ */
+@media (max-width: 768px) {
+  .show-completed-mini {
+    position: static !important;
+    display: none !important;
+  }
+
+  /* Plain container for the list instead of the scrolling table */
+  .grid-wrap {
+    max-height: none;
+    padding: 0;
+    overflow: visible;
+    border: none;
+    background: transparent;
+  }
+
+  /* ---- Task list ---- */
+  .mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .m-task {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Task header */
+  .m-task .label-col.m-task-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px 12px 5px;
+    font-weight: 700;
+    font-size: 15px;
+    background: color-mix(in srgb, var(--task-color) 12%, var(--panel));
+    border-left: 4px solid var(--task-color);
+    position: static;   /* undo desktop sticky + width cap */
+    min-width: 0;
+    max-width: none;
+    border-right: none;
+  }
+  .m-task .task-title { flex: 1; }   /* ellipsis comes from .task-title */
+  .m-task .task-btns {
+    opacity: 1;   /* always visible (no hover on touch) */
+    gap: 4px;
+  }
+  .m-task .task-edit, .m-task .task-del {
+    font-size: 15px;
+    padding: 4px 8px;
+  }
+
+  /* Subtask rows */
+  .m-subtask {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 8px 12px 8px 7px;
+    border-top: 1px solid var(--cell-border);
+    border-left: 4px solid var(--task-color);
+    background: color-mix(in srgb, var(--task-color) 4%, var(--panel));
+    touch-action: pan-y;   /* vertical scroll stays native */
+    will-change: transform;
+  }
+  .m-sub-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    position: static;
+    padding: 0;
+    border: none;
+    background: none;
+  }
+  .m-sub-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 15px;
+  }
+
+  .m-sub-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .m-subtask .sched-btn {
+    font-size: 14px;
+    padding: 3px 6px;
+  }
+
+  .m-subtask .ball-dot {
+    opacity: 1;
+    font-size: 13px;
+    padding: 2px;
+  }
+
+  /* Checkbox + 🏐 for mouse/trackpad (narrow laptop window); touch screens swipe instead */
+  .m-subtask .m-click-only { flex-shrink: 0; }
+  .m-subtask .done-check.m-click-only {
+    width: 16px;
+    height: 16px;
+    margin: 0 2px 0 4px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .m-subtask .ball-dot.m-click-only {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    opacity: 0.45;
+    font-size: 14px;
+    padding: 2px 4px;
+  }
+  .m-subtask .ball-dot.m-click-only:hover {
+    opacity: 1;
+    transform: none;
+  }
+  .m-subtask .ball-dot.m-click-only.ball-waiting { opacity: 1; }
+  .m-subtask[data-waiting="1"] .m-wait-mark { display: none; }   /* the 🏓 button shows it */
+  @media (hover: none) and (pointer: coarse) {
+    .m-subtask .m-click-only { display: none; }
+    .m-subtask[data-waiting="1"] .m-wait-mark { display: inline; }
+  }
+
+  .m-wait-mark {
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .m-subtask.subtask-done .m-sub-name {
+    text-decoration: line-through;
+    color: var(--muted);
+  }
+
+  /* Due-date chip, coloured by urgency */
+  .m-due {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    min-width: 30px;
+    text-align: center;
+  }
+  .m-due-overdue {
+    background: var(--c-red-100);
+    color: var(--c-red-dark);
+  }
+  .m-due-soon {
+    background: var(--c-amber-100);
+    color: var(--c-orange-700);
+  }
+  .m-due-week {
+    background: var(--c-gold-100);
+    color: var(--c-brown-700);
+  }
+  .m-due-far {
+    background: var(--neutral-bg);
+    color: var(--muted);
+  }
+  .m-due-none {
+    background: transparent;
+    color: var(--c-gray-350);
+  }
+  .m-due-done {
+    background: transparent;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* Note dot sits inline in the flex row */
+  .m-task .note-dot, .m-subtask .note-dot {
+    position: static;
+    font-size: 8px;
+  }
+
+  /* ---- Swipe gestures on subtask rows ---- */
+  /* ::before = colour overlay over the whole row, above all content */
+  .m-subtask::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--green);
+  }
+  .m-subtask.swiping-right::before {
+    background: var(--green);
+    opacity: var(--swipe-strength, 0);
+  }
+  .m-subtask.swiping-left::before {
+    background: var(--c-yellow, #e0b64a);
+    opacity: var(--swipe-strength, 0);
+  }
+  .m-subtask[data-waiting="1"].swiping-left::before {
+    background: var(--offwhite, #f2efe6);
+    opacity: var(--swipe-strength, 0);
+  }
+
+  /* ::after = action icon, above the overlay in the opened gap */
+  .m-subtask::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: var(--c-white);
+    z-index: 6;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .m-subtask.swiping-right::after {
+    content: '✓';
+    left: 0;
+    opacity: var(--swipe-strength, 0);
+  }
+  .m-subtask.swiping-left::after {
+    content: '🏓';
+    right: 0;
+    left: auto;
+    opacity: var(--swipe-strength, 0);
+  }
+  .m-subtask[data-waiting="1"].swiping-left::after {
+    content: '🏐';
+    color: var(--text);   /* readable if the glyph isn't an emoji */
+  }
+
+  /* Sliding content; no background here or it paints boxes over the overlay */
+  .m-subtask > .m-sub-label,
+  .m-subtask > .m-sub-right {
+    position: relative;
+    z-index: 1;
+    transform: translateX(var(--swipe-x, 0));
+  }
+
+  /* Smooth snap-back */
+  .m-subtask.swipe-animating > .m-sub-label,
+  .m-subtask.swipe-animating > .m-sub-right { transition: transform 0.2s ease; }
+  .m-subtask.swipe-animating::before,
+  .m-subtask.swipe-animating::after { transition: opacity 0.2s ease; }
+}

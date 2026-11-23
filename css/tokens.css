@@ -1,0 +1,256 @@
+/* ============================================================
+   TOKENS — Every design variable in one place:
+     1. Raw palette        (--c-*, --task-*)
+     2. Semantic roles     (--bg, --accent, --done-bg …)
+     3. Typography, icons, sizing, spacing, effects
+   Components should use the semantic roles (2) and only reach
+   for the raw palette (1) when no role fits.
+   ============================================================ */
+
+:root {
+  /* ============ 1. RAW PALETTE ============ */
+
+  /* Neutrals — clean, faint warmth */
+  --c-white:      #ffffff;
+  --c-gray-50:    #fbfaf8;
+  --c-gray-100:   #f4f2ed;   /* main background */
+  --c-gray-150:   #edeae3;
+  --c-gray-200:   #e4e0d7;
+  --c-gray-250:   #dcd8cd;
+  --c-gray-300:   #d0cabd;   /* borders */
+  --c-gray-350:   #bbb3a2;
+  --c-gray-400:   #9f9684;
+  --c-gray-500:   #807865;
+  --c-gray-600:   #655d4d;   /* muted text */
+  --c-gray-700:   #463524;
+  --c-gray-800:   #3e2f22;
+  --c-gray-850:   #33261b;
+  --c-black:      #2a1d12;
+
+  /* Primary accent — forest/olive green (the board's hero) */
+  --c-blue:       #4a6b2f;   /* mid forest green */
+  --c-blue-dark:  #3a5424;   /* deep olive — hover/active */
+  --c-blue-50:    #f1f4ea;
+  --c-blue-100:   #dde7c9;
+  --c-blue-150:   #e7edd6;
+  --c-blue-200:   #bcce9a;   /* soft sage */
+  --c-blue-900:   #2b3d1a;   /* deep forest */
+
+  /* Green (status: done/synced) — brighter grass green */
+  --c-green:      #5a8a2e;   /* lively green */
+  --c-green-dark: #497325;
+  --c-green-50:   #f2f6ea;
+  --c-green-100:  #deebc9;
+  --c-green-150:  #cae0a8;   /* pale spring green */
+  --c-green-700:  #3a5c1c;
+
+  /* Red — deep brick/rust (strongest warnings, due ✕) */
+  --c-red:        #a8402a;   /* brick red */
+  --c-red-dark:   #8a3220;
+  --c-red-50:     #f6e7e2;
+  --c-red-100:    #eed3ca;
+  --c-red-200:    #dba897;
+
+  /* Coral / warm — soft salmon accent (friendly highlights, pending) */
+  --c-orange:     #e8906f;   /* soft coral */
+  --c-orange-600: #dd7f5c;
+  --c-orange-700: #c96a48;
+  --c-yellow:     #d9a94a;   /* warm honey (today highlight) */
+  --c-amber-50:   #f8f0e4;
+  --c-amber-100:  #f3e6d2;
+  --c-gold-100:   #ecd9b4;
+  --c-gold-200:   #dcc088;
+  --c-gold-300:   #c9a456;
+  --c-gold-400:   #d4b56a;
+
+  /* Browns — warm earth tones (celebration golds, deep text) */
+  --c-brown-600:  #8a6a40;
+  --c-brown-700:  #73542c;
+  --c-brown-800:  #5f441f;
+  --c-brown-900:  #4d3818;
+  --c-brown-950:  #3a2a12;
+
+  /* Overlays — warm-neutral depth */
+  --c-shadow-10:   rgba(50,40,25,0.07);
+  --c-shadow-15:   rgba(50,40,25,0.11);
+  --c-shadow-30:   rgba(45,35,20,0.26);
+  --c-shadow-35:   rgba(45,35,20,0.32);
+  --c-shadow-40:   rgba(45,35,20,0.38);
+  --c-shadow-50:   rgba(40,30,18,0.48);
+  --c-overlay-06:  rgba(50,40,25,0.05);
+  --c-red-tint:    rgba(168,64,42,0.07);
+  --c-red-tint-15: rgba(168,64,42,0.14);
+  --c-red-tint-20: rgba(168,64,42,0.20);
+  --c-blue-tint:   rgba(74,107,47,0.05);
+  --c-blue-tint-15: rgba(74,107,47,0.15);
+  --c-gold-tint:   rgba(217,169,74,0.28);
+
+  /* Task palette — diverse, evenly spread hues */
+  --task-01: #c0392b;  /* red */
+  --task-02: #2e8b57;  /* sea green */
+  --task-03: #8e44ad;  /* violet */
+  --task-04: #e8803a;  /* orange */
+  --task-05: #2980b9;  /* blue */
+  --task-06: #d81b7a;  /* magenta */
+  --task-07: #7c9a3a;  /* olive green */
+  --task-08: #e0a92e;  /* golden yellow */
+  --task-09: #16a085;  /* teal */
+  --task-10: #c0564a;  /* brick/salmon */
+  --task-11: #6b4a9e;  /* purple */
+  --task-12: #4a7c2f;  /* forest green */
+  --task-13: #e85a8a;  /* pink */
+  --task-14: #3a7ca5;  /* steel blue */
+  --task-15: #d4762e;  /* pumpkin */
+  --task-16: #5aad6e;  /* mint green */
+  --task-17: #923c5e;  /* berry */
+  --task-18: #b59a2e;  /* ochre gold */
+  --task-19: #9b59b6;  /* light purple */
+  --task-20: #cf5540;  /* coral rust */
+
+  /* ============ 2. SEMANTIC COLOR ROLES ============ */
+
+  /* Surfaces & text */
+  --bg:           var(--c-gray-100);
+  --panel:        var(--c-white);
+  --border:       var(--c-gray-300);
+  --text:         var(--c-black);
+  --muted:        var(--c-gray-600);
+
+  /* Brand / accents */
+  --accent:       var(--c-blue);
+  --accent-dark:  var(--c-blue-dark);
+  --green:        var(--c-green);
+  --today:        var(--c-yellow);
+  --danger:       var(--c-red);
+
+  /* Status badges */
+  --pending-bg:   var(--c-amber-100);
+  --pending-text: var(--c-brown-600);
+  --done-bg:      var(--c-green-100);
+  --done-text:    var(--c-green-700);
+  --neutral-bg:   var(--c-gray-150);
+  --neutral-text: var(--c-gray-600);
+  --warn-bg:      var(--c-red-100);
+  --warn-text:    var(--c-red-dark);
+  --saving-bg:    var(--c-amber-50);
+  --saving-text:  var(--c-brown-700);
+  --offline-bg:   var(--c-gray-350);
+  --offline-text: var(--c-gray-700);
+
+  /* Calendar events */
+  --app-block-bg:   var(--c-blue-100);
+  --app-block-text: var(--c-blue-900);
+  --busy-bg:        var(--c-gold-100);
+  --busy-text:      var(--c-gray-850);
+  --busy-border:    var(--c-gray-600);
+
+  /* Gold celebration */
+  --gold-1:       var(--c-amber-50);
+  --gold-2:       var(--c-gold-100);
+  --gold-3:       var(--c-gold-200);
+  --gold-border:  var(--c-gold-300);
+  --gold-header:  var(--c-brown-900);
+  --gold-label:   var(--c-brown-600);
+  --gold-text:    var(--c-brown-950);
+  --gold-hours:   var(--c-brown-800);
+
+  /* Clock button */
+  --clock-pending-bg:     var(--c-orange);
+  --clock-pending-border: var(--c-orange-700);
+  --clock-pending-hover:  var(--c-orange-600);
+  --clock-full-border:    var(--c-green-dark);
+  --clock-done-bg:        var(--c-gray-350);
+
+  /* Cells / weekend / lines */
+  --weekend-bg:   var(--c-gray-150);
+  --cell-weekend: var(--c-gray-50);
+  --cell-border:  var(--c-gray-200);
+  --hour-line:    var(--c-gray-250);
+
+  /* Hover tints */
+  --hover-row:           var(--c-overlay-06);
+  --hover-cell-cal:      var(--c-blue-tint);
+  --del-hover-bg:        var(--c-red-50);
+  --del-hover-border:    var(--c-red-200);
+  --future-hover-bg:     var(--c-amber-100);
+  --future-hover-border: var(--c-gold-400);
+  --none-hover-bg:       var(--c-blue-50);
+  --none-hover-border:   var(--c-blue-200);
+
+  /* Due-date highlights */
+  --due-col-bg:    var(--c-red-tint);
+  --due-header-bg: var(--c-red-tint-15);
+
+  /* Progress chips */
+  --chip-bg:     var(--c-green-50);
+  --chip-border: var(--c-green-150);
+
+  /* Scrollbar */
+  --scrollbar-track: var(--c-gray-150);
+  --scrollbar-thumb: var(--c-gray-400);
+  --scrollbar-hover: var(--c-gray-500);
+
+  /* Login gradient */
+  --login-grad-1: var(--c-blue-150);
+  --login-grad-2: var(--c-gray-100);
+
+  /* Misc surfaces */
+  --subtask-row-bg: var(--c-gray-50);
+  --backdrop:       var(--c-shadow-35);
+
+  /* ============ 3. TYPE, SIZING, SPACING, EFFECTS ============ */
+
+  /* ---- Typography ---- */
+  --font-main:  "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Spectral", Georgia, serif;   /* headings */
+  --fs-h1:       24px;
+  --fs-body:     14px;
+  --fs-small:    12px;
+  --fs-tiny:     10px;
+  --fs-badge:    9px;
+  --fs-subtask:  13px;
+
+  /* ---- Icons ---- */
+  --icon-note: '📝';
+
+  /* ---- Sizing ---- */
+  --radius:      10px;
+  --radius-lg:   16px;
+  --radius-pill: 20px;
+
+  /* Grid */
+  --grid-cell-size:          34px;
+  --grid-cell-size-mobile:   30px;
+  --grid-label-width:        220px;
+  --grid-label-width-mobile: 150px;
+  --grid-max-height:         75vh;
+  --month-row-height:        33px;
+  --grid-row-pad:            3px 12px;
+  --grid-subtask-pad:        2px 12px;
+  --st-name-width:           150px;
+  --label-max:               320px;   /* label column cap: longer names truncate */
+  --label-min:               180px;   /* label column floor */
+
+  /* Day view, planner, progress, scheduler */
+  --dayview-width:      280px;
+  --dayview-height:     75vh;
+  --dayview-hour-px:    44;
+  --planner-height:     80vh;
+  --backlog-card-width: 180px;
+  --fc-slot-height:     3em;
+  --prog-day-width:     160px;
+  --prog-min-height:    55vh;
+  --sched-hour-px:      48;
+
+  /* ---- Spacing ---- */
+  --gap-tiny: 4px;
+  --gap-sm:   8px;
+  --gap-md:   12px;
+  --gap-lg:   16px;
+
+  /* ---- Effects ---- */
+  --shadow-card:  0 4px 16px var(--c-shadow-10);
+  --shadow-modal: 0 12px 48px var(--c-shadow-15);
+  --shadow-block: 0 1px 4px var(--c-shadow-15);
+  --transition: 0.2s ease;
+}

@@ -1,4 +1,4 @@
-const KEY = 'taskgrid_settings';
+const STORAGE_KEY = 'taskgrid_settings';
 
 export class Settings {
   constructor() {
@@ -7,14 +7,14 @@ export class Settings {
 
   _load() {
     try {
-      return JSON.parse(localStorage.getItem(KEY)) || {};
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
     } catch {
       return {};
     }
   }
 
   _save() {
-    localStorage.setItem(KEY, JSON.stringify(this.data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
   }
 
   // which calendar IDs to display (defaults to primary)

@@ -1,10 +1,16 @@
 import { TimeBlock } from '../models/Subtask.js';
-import { startOfDay, sameDay } from '../utils.js';
+import { startOfDay, sameDay, ymdLocal, pad2, parseLocalDateTime } from '../core/dates.js';
+import { escapeHtml } from '../utils.js';
+import { Modal } from '../core/Modal.js';
 import { cssVar } from '../theme.js';
 
 const SLOT_MIN = 15;
-const HOUR_PX = cssVar('--sched-hour-px', 48);   
+const HOUR_PX = cssVar('--sched-hour-px', 48);
 const PX_PER_MIN = HOUR_PX / 60;
+const MIN_EVENT_PX = 16;
+const MS_PER_HOUR = 3600000;
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DONE_RESULT = { cancelled: false, discardTask: false };
 
 export class CalendarView {
   constructor(store, googleCalendar, settings, { onDone = () => {} } = {}) {
@@ -12,124 +18,138 @@ export class CalendarView {
     this.gcal = googleCalendar;
     this.settings = settings;
     this.onDone = onDone;
-    this.context = null;
-    this.weekStart = this._mondayOf(new Date());
+    this.context = null; // { taskId, subIndex } being scheduled
+    this.weekStart = mondayOf(new Date());
     this.busyEvents = [];
     this.blocks = [];
-    
-    // DOM refs
-    this.overlay = document.getElementById('calOverlay');
+    this._inCreationSequence = false;
+    this._originalEventIds = [];
+
+    this.overlay = new Modal('calOverlay');
     this.title = document.getElementById('calTitle');
     this.counter = document.getElementById('calCounter');
     this.gridWrap = document.getElementById('calGridWrap');
-    
-    
-    document.getElementById('calScheduleLater').addEventListener('click', () => this._scheduleLater());
-    document.getElementById('calPrevWeek').addEventListener('click', () => this._shiftWeek(-7));
-    document.getElementById('calThisWeek').addEventListener('click', () => this._thisWeek());
-    document.getElementById('calNextWeek').addEventListener('click', () => this._shiftWeek(7));
-    document.getElementById('calCancel').addEventListener('click', () => this._cancel());
-    document.getElementById('calPush').addEventListener('click', () => this._push());
+    this.pushBtn = document.getElementById('calPush');
+
+    this._bindToolbar();
   }
 
   // ---------- open / close ----------
   async open(taskId, subIndex, opts = {}) {
     this.context = { taskId, subIndex };
     this._inCreationSequence = !!opts.sequence;
+
     const task = this.store.find(taskId);
     const st = task.subtasks[subIndex];
     const est = st.estHoursNum ? ` · ${st.estHoursNum}h` : '';
-    
     this.title.innerHTML =
-      `<span class="cal-task">${this._esc(task.name)}</span>
-       <span class="cal-sub">▸ ${this._esc(st.name)}${est}</span>`;
-
-    // relabel push button based on sync state
-    const pushBtn = document.getElementById('calPush');
-    pushBtn.textContent = this.gcal.syncEnabled ? 'Push to Google Calendar' : 'Save blocks';
+      `<span class="cal-task">${escapeHtml(task.name)}</span>
+       <span class="cal-sub">▸ ${escapeHtml(st.name)}${est}</span>`;
+    this.pushBtn.textContent = pushLabel(this.gcal.syncEnabled);
 
     this.blocks = st.blocks.map((b) => new TimeBlock(b));
     this._originalEventIds = st.blocks.map((b) => b.eventId).filter(Boolean);
-    this.weekStart = this._mondayOf(new Date());
-    this.overlay.classList.add('open');
+    this.weekStart = mondayOf(new Date());
+    this.overlay.show();
     await this._loadAndRender();
     this._scrollToHour(8);
   }
 
   close() {
-    this.overlay.classList.remove('open');
+    this.overlay.close();
     this.context = null;
   }
 
-  // ---------- week nav ----------
-  _mondayOf(d) {
-    const x = startOfDay(d);
-    const day = (x.getDay() + 6) % 7; // Mon=0
-    x.setDate(x.getDate() - day);
-    return x;
+  _finish(result) {
+    this.close();
+    this._inCreationSequence = false;
+    this.onDone(result);
   }
-  async _shiftWeek(days) { this.weekStart.setDate(this.weekStart.getDate() + days); await this._loadAndRender(); }
-  async _thisWeek() { this.weekStart = this._mondayOf(new Date()); await this._loadAndRender(); }
+
+  _cancel() {
+    const wasCreating = this._inCreationSequence;
+    if (wasCreating && !confirm('Cancel and discard this new task? Your subtasks won\'t be saved.')) return;
+    this._finish({ cancelled: true, discardTask: wasCreating });
+  }
+
+  // Keeps the task but stops the creation sequence.
+  _scheduleLater() {
+    this._finish({ ...DONE_RESULT });
+  }
+
+  _bindToolbar() {
+    const on = (id, handler) => document.getElementById(id).addEventListener('click', handler);
+    on('calScheduleLater', () => this._scheduleLater());
+    on('calPrevWeek', () => this._shiftWeek(-7));
+    on('calThisWeek', () => this._thisWeek());
+    on('calNextWeek', () => this._shiftWeek(7));
+    on('calCancel', () => this._cancel());
+    on('calPush', () => this._push());
+  }
+
+  // ---------- week navigation ----------
+  async _shiftWeek(days) {
+    this.weekStart.setDate(this.weekStart.getDate() + days);
+    await this._loadAndRender();
+  }
+
+  async _thisWeek() {
+    this.weekStart = mondayOf(new Date());
+    await this._loadAndRender();
+  }
 
   // ---------- data ----------
   async _loadAndRender() {
     this.gridWrap.innerHTML = '<div class="cal-loading">Loading your calendar…</div>';
-    const weekEnd = new Date(this.weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
 
-    // fetch Google busy events
-    let googleBusy = [];
-    try {
-      const calIds = this.settings.getSelectedCalendars();
-      googleBusy = this.gcal.isAuthed
-        ? await this.gcal.getEvents(this.weekStart, weekEnd, calIds)
-        : [];
-    } catch (e) {
-      console.error(e);
-      googleBusy = [];
-    }
-
-    // collect OTHER app blocks (from other subtasks) as busy context
-    const appBusy = this._collectOtherAppBlocks();
-
-    // dedup: skip Google events that correspond to app blocks (by eventId)
-    const appBlockEventIds = new Set();
-    this.store.getAll().forEach((t) =>
-      t.subtasks.forEach((s) =>
-        s.blocks.forEach((b) => { if (b.eventId) appBlockEventIds.add(b.eventId); })
-      )
-    );
+    const googleBusy = await this._fetchGoogleBusy();
+    const appBlockEventIds = this._collectBlockEventIds();
     const dedupedGoogle = googleBusy.filter((ev) => !appBlockEventIds.has(ev.id));
-
-    // merge: Google busy + other app blocks
-    this.busyEvents = [...dedupedGoogle, ...appBusy];
+    this.busyEvents = [...dedupedGoogle, ...this._collectOtherAppBlocks()];
 
     this._render();
   }
 
-  // Gather blocks from all subtasks EXCEPT the one currently being scheduled,
-  // so you can see your existing plan as busy context.
+  async _fetchGoogleBusy() {
+    const weekEnd = new Date(this.weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    try {
+      const calIds = this.settings.getSelectedCalendars();
+      return this.gcal.isAuthed ? await this.gcal.getEvents(this.weekStart, weekEnd, calIds) : [];
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }
+
+  // Used to drop Google events that mirror app blocks.
+  _collectBlockEventIds() {
+    const ids = new Set();
+    this.store.getAll().forEach((task) =>
+      task.subtasks.forEach((st) =>
+        st.blocks.forEach((b) => { if (b.eventId) ids.add(b.eventId); })
+      )
+    );
+    return ids;
+  }
+
+  // Blocks from every subtask except the one being edited, shown as busy context.
   _collectOtherAppBlocks() {
+    const { taskId: curTaskId, subIndex: curSubIndex } = this.context ?? {};
     const result = [];
-    const curTaskId = this.context?.taskId;
-    const curSubIndex = this.context?.subIndex;
 
     this.store.getAll().forEach((task) => {
       task.subtasks.forEach((st, subIndex) => {
-        // skip the subtask we're currently scheduling (its blocks are editable)
         if (task.id === curTaskId && subIndex === curSubIndex) return;
 
         st.blocks.forEach((b) => {
           if (!b.date || !b.start) return;
-          const start = new Date(b.date + 'T00:00:00');
-          const [h, m] = b.start.split(':').map(Number);
-          start.setHours(h, m, 0, 0);
-          const end = new Date(start.getTime() + b.hoursNum * 3600000);
+          const start = parseLocalDateTime(b.date, b.start);
           result.push({
             title: `${task.name}: ${st.name}`,
             start,
-            end,
-            _appBlock: true, 
+            end: new Date(start.getTime() + b.hoursNum * MS_PER_HOUR),
+            _appBlock: true,
             _color: task.color,
           });
         });
@@ -139,79 +159,55 @@ export class CalendarView {
     return result;
   }
 
-  // ---------- render ----------
+  // ---------- rendering ----------
   _render() {
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(this.weekStart);
-      d.setDate(d.getDate() + i);
-      days.push(d);
-    }
-    const dow = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const today = startOfDay(new Date());
-
-    let html = '<div class="cal-table">';
-    // header row
-    html += '<div class="cal-corner"></div>';
-    days.forEach((d, i) => {
-      const isToday = sameDay(d, today) ? 'today' : '';
-      html += `<div class="cal-day-head ${isToday}">
-                 <span class="dow">${dow[i]}</span>${d.getMonth() + 1}/${d.getDate()}
-               </div>`;
-    });
-
-    // time label column
-    html += '<div>';
-    for (let h = 0; h < 24; h++) {
-      html += `<div class="cal-time-label">${this._fmtHour(h)}</div>`;
-    }
-    html += '</div>';
-
-    // day columns
-    days.forEach((d, dayIdx) => {
-      html += `<div class="cal-daycol" data-day-index="${dayIdx}">`;
-      for (let h = 0; h < 24; h++) {
-        html += `<div class="cal-hour-cell" data-hour="${h}"></div>`;
-      }
-      html += '</div>';
-    });
-
-    html += '</div>';
-    this.gridWrap.innerHTML = html;
-
+    const days = this._weekDays();
+    this.gridWrap.innerHTML = gridHtml(days);
     this._renderBusyEvents(days);
     this._renderBlocks(days);
     this._attachInteractions(days);
     this._updateCounter();
   }
 
+  _weekDays() {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(this.weekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  }
+
+  _dayColumns() {
+    return this.gridWrap.querySelectorAll('.cal-daycol');
+  }
+
   _renderBusyEvents(days) {
-    const cols = this.gridWrap.querySelectorAll('.cal-daycol');
+    const cols = this._dayColumns();
     this.busyEvents.forEach((ev) => {
       const dayIdx = days.findIndex((d) => sameDay(d, ev.start));
       if (dayIdx < 0) return;
+
       const el = document.createElement('div');
       el.className = ev._appBlock ? 'cal-event cal-event-app' : 'cal-event';
-      el.style.top = this._minutesFromMidnight(ev.start) * PX_PER_MIN + 'px';
-      el.style.height = Math.max(16, (ev.end - ev.start) / 60000 * PX_PER_MIN) + 'px';
+      el.style.top = minutesFromMidnight(ev.start) * PX_PER_MIN + 'px';
+      el.style.height = Math.max(MIN_EVENT_PX, (ev.end - ev.start) / 60000 * PX_PER_MIN) + 'px';
       el.textContent = ev.title;
-      if (ev._appBlock && ev._color) {
-        el.style.setProperty('--block-color', ev._color);
-      }
+      if (ev._appBlock && ev._color) el.style.setProperty('--block-color', ev._color);
       cols[dayIdx].appendChild(el);
     });
   }
 
   _renderBlocks(days) {
-    const cols = this.gridWrap.querySelectorAll('.cal-daycol');
+    const cols = this._dayColumns();
     this.blocks.forEach((b, idx) => {
-      const bStart = this._blockStartDate(b);
-      const dayIdx = days.findIndex((d) => sameDay(d, bStart));
+      const start = parseLocalDateTime(b.date, b.start);
+      const dayIdx = days.findIndex((d) => sameDay(d, start));
       if (dayIdx < 0) return;
+
       const el = document.createElement('div');
       el.className = 'cal-block';
       el.dataset.blockIndex = idx;
-      el.style.top = this._minutesFromMidnight(bStart) * PX_PER_MIN + 'px';
+      el.style.top = minutesFromMidnight(start) * PX_PER_MIN + 'px';
       el.style.height = b.hoursNum * 60 * PX_PER_MIN + 'px';
       el.innerHTML = `<span class="block-del" data-del="${idx}">✕</span>
                       ${b.hours}h
@@ -220,37 +216,49 @@ export class CalendarView {
     });
   }
 
+  _updateCounter() {
+    const st = this.store.find(this.context.taskId).subtasks[this.context.subIndex];
+    const est = st.estHoursNum;
+    const placed = this.blocks.reduce((sum, b) => sum + b.hoursNum, 0);
+    const left = est - placed;
+
+    let text;
+    if (est === 0) text = `${placed}h placed`;
+    else if (left <= 0) text = `✓ ${placed}h placed — done!`;
+    else text = `${est}h needed · ${placed}h placed · ${left}h left`;
+
+    this.counter.textContent = text;
+    this.counter.classList.toggle('done', est !== 0 && left <= 0);
+  }
+
+  _scrollToHour(h) {
+    this.gridWrap.scrollTop = h * HOUR_PX;
+  }
+
   // ---------- interactions ----------
   _attachInteractions(days) {
-    const cols = this.gridWrap.querySelectorAll('.cal-daycol');
-
-    cols.forEach((col, dayIdx) => {
-      // Click empty space → drag-create a block
+    this._dayColumns().forEach((col, dayIdx) => {
       col.addEventListener('mousedown', (e) => {
         if (e.target.closest('.cal-block') || e.target.closest('.cal-event')) return;
-        this._startDragCreate(e, col, dayIdx, days);
+        this._startDragCreate(e, col, days[dayIdx]);
       });
     });
 
-    // Delete buttons
     this.gridWrap.querySelectorAll('.block-del').forEach((btn) => {
       btn.addEventListener('mousedown', (e) => {
         e.stopPropagation();
-        const idx = parseInt(btn.dataset.del, 10);
-        this.blocks.splice(idx, 1);
+        this.blocks.splice(parseInt(btn.dataset.del, 10), 1);
         this._render();
       });
     });
 
-    // Resize handles
-    this.gridWrap.querySelectorAll('.resize-handle').forEach((h) => {
-      h.addEventListener('mousedown', (e) => {
+    this.gridWrap.querySelectorAll('.resize-handle').forEach((handle) => {
+      handle.addEventListener('mousedown', (e) => {
         e.stopPropagation();
-        this._startResize(e, parseInt(h.dataset.resize, 10), days);
+        this._startResize(e, parseInt(handle.dataset.resize, 10));
       });
     });
 
-    // Move blocks
     this.gridWrap.querySelectorAll('.cal-block').forEach((el) => {
       el.addEventListener('mousedown', (e) => {
         if (e.target.closest('.resize-handle') || e.target.closest('.block-del')) return;
@@ -259,209 +267,184 @@ export class CalendarView {
     });
   }
 
-  _startDragCreate(e, col, dayIdx, days) {
+  _startDragCreate(e, col, day) {
     const rect = col.getBoundingClientRect();
-    const startMin = this._snap((e.clientY - rect.top) / PX_PER_MIN);
-    const day = days[dayIdx];
+    const startMin = snap((e.clientY - rect.top) / PX_PER_MIN);
 
-    const block = new TimeBlock({
-      date: this._ymdLocal(day),
-      start: this._minToTime(startMin),
+    this.blocks.push(new TimeBlock({
+      date: ymdLocal(day),
+      start: minToTime(startMin),
       hours: 0.25,
-    });
-    this.blocks.push(block);
+    }));
     const blockIndex = this.blocks.length - 1;
     this._render();
 
-    const move = (me) => {
-      const curMin = this._snap((me.clientY - rect.top) / PX_PER_MIN);
-      let dur = curMin - startMin;
-      if (dur < SLOT_MIN) dur = SLOT_MIN;
-      this.blocks[blockIndex].hours = (dur / 60);
-      this._render();
-    };
-    const up = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-      this._render();
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
+    trackDrag(
+      (me) => {
+        const curMin = snap((me.clientY - rect.top) / PX_PER_MIN);
+        this.blocks[blockIndex].hours = Math.max(SLOT_MIN, curMin - startMin) / 60;
+        this._render();
+      },
+      () => this._render()
+    );
   }
 
-  _startResize(e, idx, days) {
+  _startResize(e, idx) {
     const block = this.blocks[idx];
     const startY = e.clientY;
-    const startHours = block.hoursNum;
+    const startMinutes = block.hoursNum * 60;
 
-    const move = (me) => {
-      const deltaMin = this._snap((me.clientY - startY) / PX_PER_MIN);
-      let newDur = startHours * 60 + deltaMin;
-      if (newDur < SLOT_MIN) newDur = SLOT_MIN;
-      block.hours = newDur / 60;
+    trackDrag((me) => {
+      const deltaMin = snap((me.clientY - startY) / PX_PER_MIN);
+      block.hours = Math.max(SLOT_MIN, startMinutes + deltaMin) / 60;
       this._render();
-    };
-    const up = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
+    });
   }
 
+  // Vertical drag moves within the day; horizontal drag moves across day columns.
   _startMove(e, idx, days) {
     const block = this.blocks[idx];
-    const startY = e.clientY;
     const startX = e.clientX;
-    const origMin = this._timeToMin(block.start);
-    const origDayIdx = days.findIndex((d) => sameDay(d, this._blockStartDate(block)));
+    const startY = e.clientY;
+    const origMin = timeToMin(block.start);
+    const origDayIdx = days.findIndex((d) => sameDay(d, parseLocalDateTime(block.date, block.start)));
     const colWidth = this.gridWrap.querySelector('.cal-daycol').getBoundingClientRect().width;
 
-    const move = (me) => {
-      const deltaMin = this._snap((me.clientY - startY) / PX_PER_MIN);
-      let newMin = origMin + deltaMin;
-      newMin = Math.max(0, Math.min(newMin, 24 * 60 - block.hoursNum * 60));
-      block.start = this._minToTime(newMin);
+    trackDrag((me) => {
+      const deltaMin = snap((me.clientY - startY) / PX_PER_MIN);
+      const maxStartMin = 24 * 60 - block.hoursNum * 60;
+      block.start = minToTime(clamp(origMin + deltaMin, 0, maxStartMin));
 
       const deltaDays = Math.round((me.clientX - startX) / colWidth);
-      let newDayIdx = origDayIdx + deltaDays;
-      newDayIdx = Math.max(0, Math.min(6, newDayIdx));
-      block.date = this._ymdLocal(days[newDayIdx]);
+      block.date = ymdLocal(days[clamp(origDayIdx + deltaDays, 0, 6)]);
 
       this._render();
-    };
-    const up = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
+    });
   }
 
-  // ---------- counter ----------
-  _updateCounter() {
-    const st = this.store.find(this.context.taskId).subtasks[this.context.subIndex];
-    const est = st.estHoursNum;
-    const placed = this.blocks.reduce((s, b) => s + b.hoursNum, 0);
-    const left = est - placed;
-    if (est === 0) {
-      this.counter.textContent = `${placed}h placed`;
-      this.counter.classList.remove('done');
-    } else if (left <= 0) {
-      this.counter.textContent = `✓ ${placed}h placed — done!`;
-      this.counter.classList.add('done');
-    } else {
-      this.counter.textContent = `${est}h needed · ${placed}h placed · ${left}h left`;
-      this.counter.classList.remove('done');
-    }
-  }
-
+  // ---------- save ----------
   async _push() {
-    if (!this.gcal.isAuthed) { alert('Please connect Google first.'); return; }
+    if (!this.gcal.isAuthed) {
+      alert('Please connect Google first.');
+      return;
+    }
 
     const task = this.store.find(this.context.taskId);
     const st = task.subtasks[this.context.subIndex];
-    const btn = document.getElementById('calPush');
+    const btn = this.pushBtn;
     const syncOn = this.gcal.syncEnabled;
     btn.disabled = true;
-    btn.textContent = syncOn ? 'Saving…' : 'Saving…';
+    btn.textContent = 'Saving…';
 
     try {
-      if (syncOn) {
-        // create or update each block on Google Calendar
-        for (const b of this.blocks) {
-          if (b.eventId) {
-            await this.gcal.updateEvent({
-              eventId: b.eventId,
-              summary: `${task.name}: ${st.name}`,
-              startDate: b.date, startTime: b.start, hours: b.hours,
-            });
-          } else {
-            const newId = await this.gcal.createEvent({
-              summary: `${task.name}: ${st.name}`,
-              description: st.note || '',
-              startDate: b.date, startTime: b.start, hours: b.hours,
-            });
-            b.eventId = newId; // may be null if guarded; that's ok
-          }
-        }
-
-        // delete events for blocks removed in the editor
-        const currentIds = this.blocks.map((b) => b.eventId).filter(Boolean);
-        const removedIds = (this._originalEventIds || [])
-          .filter((id) => !currentIds.includes(id));
-        for (const id of removedIds) {
-          await this.gcal.deleteEvent(id);
-        }
-      }
-      // if sync off: skip ALL Google calls; blocks just save locally below
-
+      // with sync off, blocks are only saved locally
+      if (syncOn) await this._syncBlocksToGoogle(task, st);
       this.store.setSubtaskBlocks(this.context.taskId, this.context.subIndex, this.blocks);
 
       btn.textContent = '✓ Saved';
-
       setTimeout(() => {
         btn.disabled = false;
-        btn.textContent = syncOn ? 'Push to Google Calendar' : 'Save blocks';
-        document.getElementById('calOverlay').classList.remove('open');
-        this.context = null;
-        this._inCreationSequence = false;
-        this.onDone({ cancelled: false, discardTask: false });
+        btn.textContent = pushLabel(syncOn);
+        this._finish({ ...DONE_RESULT });
       }, 1000);
-
     } catch (err) {
       console.error(err);
       alert('Error: ' + (err.result?.error?.message || err.message));
       btn.disabled = false;
-      btn.textContent = syncOn ? 'Push to Google Calendar' : 'Save blocks';
+      btn.textContent = pushLabel(syncOn);
     }
   }
 
-  // ---------- helpers ----------
-  _snap(min) { return Math.round(min / SLOT_MIN) * SLOT_MIN; }
-  _minutesFromMidnight(d) { return d.getHours() * 60 + d.getMinutes(); }
-  _blockStartDate(b) {
-    const d = new Date(b.date + 'T00:00:00');
-    const [h, m] = b.start.split(':').map(Number);
-    d.setHours(h, m, 0, 0);
-    return d;
-  }
-  _timeToMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
-  _minToTime(min) {
-    const h = Math.floor(min / 60), m = min % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-  _fmtHour(h) {
-    if (h === 0) return '12 AM';
-    if (h === 12) return '12 PM';
-    return h < 12 ? `${h} AM` : `${h - 12} PM`;
-  }
-  _ymdLocal(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-  _scrollToHour(h) {
-    this.gridWrap.scrollTop = h * HOUR_PX;
-  }
-  _esc(s) {
-    return String(s).replace(/[&<>"']/g, (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-  _cancel() {
-    if (this._inCreationSequence) {
-      if (!confirm('Cancel and discard this new task? Your subtasks won\'t be saved.')) {
-        return; // don't close
+  // Creates/updates an event per block, then deletes events for blocks removed in the editor.
+  async _syncBlocksToGoogle(task, st) {
+    const summary = `${task.name}: ${st.name}`;
+
+    for (const b of this.blocks) {
+      const timing = { startDate: b.date, startTime: b.start, hours: b.hours };
+      if (b.eventId) {
+        await this.gcal.updateEvent({ eventId: b.eventId, summary, ...timing });
+      } else {
+        // createEvent may return null when guarded; the block then stays local
+        b.eventId = await this.gcal.createEvent({ summary, description: st.note || '', ...timing });
       }
     }
-    document.getElementById('calOverlay').classList.remove('open');
-    const wasCreating = this._inCreationSequence;
-    this.context = null;
-    this._inCreationSequence = false;
-    this.onDone({ cancelled: true, discardTask: wasCreating });
+
+    const currentIds = this.blocks.map((b) => b.eventId).filter(Boolean);
+    const removedIds = this._originalEventIds.filter((id) => !currentIds.includes(id));
+    for (const id of removedIds) {
+      await this.gcal.deleteEvent(id);
+    }
   }
-  _scheduleLater() {
-    document.getElementById('calOverlay').classList.remove('open');
-    this._inCreationSequence = false;
-    this.context = null;
-    this.onDone({ cancelled: false, discardTask: false }); // keep task, stop sequence
-  }
+}
+
+// ---------- grid markup ----------
+function gridHtml(days) {
+  const today = startOfDay(new Date());
+
+  const headers = days.map((d, i) => {
+    const isToday = sameDay(d, today) ? 'today' : '';
+    return `<div class="cal-day-head ${isToday}">
+                 <span class="dow">${DAY_NAMES[i]}</span>${d.getMonth() + 1}/${d.getDate()}
+               </div>`;
+  }).join('');
+
+  const hours = Array.from({ length: 24 }, (_, h) => h);
+  const timeLabels = hours.map((h) => `<div class="cal-time-label">${fmtHour(h)}</div>`).join('');
+  const hourCells = hours.map((h) => `<div class="cal-hour-cell" data-hour="${h}"></div>`).join('');
+  const dayColumns = days
+    .map((_, dayIdx) => `<div class="cal-daycol" data-day-index="${dayIdx}">${hourCells}</div>`)
+    .join('');
+
+  return `<div class="cal-table"><div class="cal-corner"></div>${headers}`
+    + `<div>${timeLabels}</div>${dayColumns}</div>`;
+}
+
+// Registers document-level mousemove/mouseup listeners for the duration of one drag.
+function trackDrag(onMove, onEnd = () => {}) {
+  const up = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', up);
+    onEnd();
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', up);
+}
+
+function pushLabel(syncOn) {
+  return syncOn ? 'Push to Google Calendar' : 'Save blocks';
+}
+
+// ---------- time helpers ----------
+function mondayOf(d) {
+  const monday = startOfDay(d);
+  const daysSinceMonday = (monday.getDay() + 6) % 7;
+  monday.setDate(monday.getDate() - daysSinceMonday);
+  return monday;
+}
+
+function snap(min) {
+  return Math.round(min / SLOT_MIN) * SLOT_MIN;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(value, max));
+}
+
+function minutesFromMidnight(d) {
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+function timeToMin(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minToTime(min) {
+  return `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+}
+
+function fmtHour(h) {
+  if (h === 0) return '12 AM';
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
 }

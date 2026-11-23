@@ -1,4 +1,8 @@
-/* ===== BASE ===== */
+/* ============================================================
+   BASE — Reset, page, typography, form controls and the shared
+   button styles (primary, green, ghost, icon) used everywhere.
+   ============================================================ */
+
 * { box-sizing: border-box; }
 
 body {
@@ -7,46 +11,12 @@ body {
   background: var(--bg);
   color: var(--text);
   padding: clamp(12px, 3vw, 24px);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1 { font-size: var(--fs-h1); margin: 0 0 var(--gap-lg); }
-
-button {
-  font: inherit; padding: 8px 14px;
-  border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--panel); cursor: pointer;
-}
-button.primary { background: var(--accent); color: var(--c-white); border-color: var(--accent); }
-button.green   { background: var(--green);  color: var(--c-white); border-color: var(--green); }
-button:hover   { filter: brightness(0.97); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
-input[type=text], input[type=date], input[type=time], input[type=number] {
-  width: 100%; font: inherit; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: var(--radius);
-}
-
-.toolbar { display: flex; gap: var(--gap-sm); margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
-.auth-status { font-size: 13px; color: var(--muted); margin-left: auto; }
-.auth-status.connected { color: var(--green); }
-
-.hint  { font-size: var(--fs-small); color: var(--muted); margin-top: 6px; }
-.empty { text-align: center; color: var(--muted); padding: 40px; }
-
-#settingsBtn { font-size: 16px; padding: 8px 12px; }
-#refreshBtn  { font-size: 13px; }
-
-#refreshBtn.syncing { opacity: 0.6; cursor: default; }
-#refreshBtn.syncing { animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-@media (max-width: 600px) {
-  h1 { font-size: 18px; }
-  .toolbar button { flex: 1 1 auto; }
-}
-
-/* Serif headings for editorial feel */
+/* ---- Typography ---- */
+/* Serif headings for an editorial feel */
 h1, h2,
 .login-card h1,
 .day-view-title,
@@ -58,15 +28,44 @@ h1, h2,
   letter-spacing: -0.01em;
 }
 
-h1 { font-weight: 700; }
-
-body {
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+h1 {
+  font-size: var(--fs-h1);
+  margin: 0 0 var(--gap-lg);
+  font-weight: 700;
 }
 
-/* ===== Button glow-up ===== */
+/* ---- Form controls ---- */
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 12px 0 4px;
+}
+
+input[type=text], input[type=date], input[type=time], input[type=number] {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  border-color: var(--border);
+  background: var(--panel);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+input[type=text]:focus, input[type=date]:focus,
+input[type=time]:focus, input[type=number]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--c-blue-tint-15);
+}
+input.input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px var(--c-red-tint-15) !important;
+}
+
+/* ---- Buttons ---- */
 button {
+  font: inherit;
   font-weight: 500;
   font-size: 13px;
   padding: 9px 16px;
@@ -75,6 +74,7 @@ button {
   background: var(--panel);
   color: var(--text);
   box-shadow: 0 1px 2px var(--c-shadow-10);
+  cursor: pointer;
   transition: all 0.18s ease;
   letter-spacing: 0.01em;
 }
@@ -110,60 +110,12 @@ button.green {
 
 button:disabled {
   opacity: 0.45;
+  cursor: not-allowed;
   box-shadow: none;
   transform: none;
 }
 
-/* Toolbar spacing + rhythm */
-.toolbar {
-  gap: 10px;
-  align-items: center;
-}
-
-/* Inputs to match the softer language */
-input[type=text], input[type=date], input[type=time], input[type=number] {
-  border-radius: 10px;
-  border-color: var(--border);
-  background: var(--panel);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
-}
-input[type=text]:focus, input[type=date]:focus,
-input[type=time]:focus, input[type=number]:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--c-blue-tint-15);
-}
-
-/* ===== Toolbar — grouped & breathable ===== */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 20px;                 /* generous gap BETWEEN groups */
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-}
-
-/* a group of related controls sits tight together */
-.tb-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;                  /* tight gap WITHIN a group */
-}
-
-/* checkbox label, quieter */
-.tb-check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.tb-check input { accent-color: var(--accent); }
-
-/* quiet icon-only buttons */
+/* Quiet icon-only buttons (main toolbar, planner toolbar) */
 .icon-btn {
   width: 38px;
   height: 38px;
@@ -176,46 +128,7 @@ input[type=time]:focus, input[type=number]:focus {
 }
 .icon-btn:hover { background: var(--c-gray-50); }
 
-/* segmented control — buttons joined into one unit */
-.tb-segment {
-  display: inline-flex;
-  margin: 0;
-}
-.tb-segment button {
-  border-radius: 0;
-  margin-left: -1px;         /* collapse shared borders */
-  box-shadow: none;
-  font-weight: 500;
-}
-.tb-segment button:first-child {
-  border-radius: 10px 0 0 10px;
-  margin-left: 0;
-}
-.tb-segment button:last-child {
-  border-radius: 0 10px 10px 0;
-}
-.tb-segment button:hover {
-  transform: none;           /* no lift inside a segment */
-  background: var(--c-gray-50);
-  z-index: 1;
-}
-.tb-segment #gridToday { font-weight: 600; }
-
-/* right-aligned status + account cluster */
-.tb-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* status text/pills should NOT look like buttons */
-.auth-status {
-  margin: 0;
-  font-size: 13px;
-}
-
-/* a quiet, low-emphasis button for secondary actions */
+/* Low-emphasis button for secondary actions */
 .ghost-btn {
   background: transparent;
   border-color: transparent;
@@ -229,7 +142,22 @@ input[type=time]:focus, input[type=number]:focus {
   transform: none;
 }
 
-input.input-error {
-  border-color: var(--danger) !important;
-  box-shadow: 0 0 0 3px var(--c-red-tint-15) !important;
+/* ---- Misc ---- */
+.hint {
+  font-size: var(--fs-small);
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px;
+}
+
+/* ============================================================
+   Small screens (≤600px)
+   ============================================================ */
+@media (max-width: 600px) {
+  h1 { font-size: 18px; }
 }

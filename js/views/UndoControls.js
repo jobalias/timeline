@@ -1,5 +1,12 @@
 // Undo / redo controls: ↶ ↷ buttons on the tab bar, ⌘Z / ⌘⇧Z (Ctrl on Windows),
 // and a "Deleted … · Undo" toast whenever something disappears.
+
+const TOAST_MS = 7000;           // toast offering an Undo action
+const TOAST_SHORT_MS = 2000;     // plain "Undone" / "Redone" confirmation
+
+const isTextField = (el) => el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+const isInWhiteboard = (el) => !!el?.closest?.('#wbList');
+
 export class UndoControls {
   constructor(store) {
     this.store = store;
@@ -13,14 +20,13 @@ export class UndoControls {
     this.redoBtn.addEventListener('click', () => this.redo());
     document.getElementById('undoToastBtn').addEventListener('click', () => this.undo());
     document.getElementById('undoToastClose').addEventListener('click', () => this._hideToast());
+    document.addEventListener('keydown', (e) => this._onKey(e));
 
     store.onHistory((info) => {
-      this._sync(info);
+      this._syncButtons(info);
       if (info.deleted) this._showToast(info.deleted);
     });
-    this._sync({ canUndo: store.canUndo(), canRedo: store.canRedo() });
-
-    document.addEventListener('keydown', (e) => this._onKey(e));
+    this._syncButtons({ canUndo: store.canUndo(), canRedo: store.canRedo() });
   }
 
   undo() {
@@ -35,30 +41,29 @@ export class UndoControls {
 
   _onKey(e) {
     if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-    const k = e.key.toLowerCase();
-    const isUndo = k === 'z' && !e.shiftKey;
-    const isRedo = (k === 'z' && e.shiftKey) || (k === 'y' && e.ctrlKey && !e.metaKey);
+    const key = e.key.toLowerCase();
+    const isUndo = key === 'z' && !e.shiftKey;
+    const isRedo = (key === 'z' && e.shiftKey) || (key === 'y' && e.ctrlKey && !e.metaKey);
     if (!isUndo && !isRedo) return;
 
     // a dialog is open → leave it alone
     if (document.querySelector('.modal-backdrop.open, .cal-overlay.open')) return;
     // typing in an ordinary text field → let the browser undo the text
     const el = document.activeElement;
-    const inField = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-    const inWhiteboard = el && el.closest && el.closest('#wbList');
-    if (inField && !inWhiteboard) return;
+    if (el && isTextField(el) && !isInWhiteboard(el)) return;
 
     e.preventDefault();
-    isUndo ? this.undo() : this.redo();
+    if (isUndo) this.undo();
+    else this.redo();
   }
 
   // the whiteboard doesn't redraw while you're typing in it — step out so it can
   _blurWhiteboard() {
     const el = document.activeElement;
-    if (el && el.closest && el.closest('#wbList')) el.blur();
+    if (isInWhiteboard(el)) el.blur();
   }
 
-  _sync({ canUndo, canRedo }) {
+  _syncButtons({ canUndo, canRedo }) {
     this.undoBtn.disabled = !canUndo;
     this.redoBtn.disabled = !canRedo;
   }
@@ -68,7 +73,7 @@ export class UndoControls {
     this.toast.classList.toggle('no-action', !withUndo || !this.store.canUndo());
     this.toast.classList.add('show');
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => this._hideToast(), withUndo ? 7000 : 2000);
+    this._toastTimer = setTimeout(() => this._hideToast(), withUndo ? TOAST_MS : TOAST_SHORT_MS);
   }
 
   _hideToast() {

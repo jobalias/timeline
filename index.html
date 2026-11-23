@@ -1,34 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>To Do List</title>
-  <link rel="stylesheet" href="css/colors.css">  
-  <link rel="stylesheet" href="css/theme.css">    
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+
+  <!-- Order matters: later sheets override earlier ones.
+       Tokens → base → shared pieces → views → overlays/dialogs.
+       Each file ends with its own @media blocks for small screens. -->
+  <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/toolbar.css">
   <link rel="stylesheet" href="css/grid.css">
   <link rel="stylesheet" href="css/dayview.css">
-  <link rel="stylesheet" href="css/scheduler.css">
+  <link rel="stylesheet" href="css/hoursfilter.css">
   <link rel="stylesheet" href="css/planner.css">
   <link rel="stylesheet" href="css/progress.css">
-  <link rel="stylesheet" href="css/modals.css">
-  <link rel="stylesheet" href="css/mobile.css">
-  <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/whiteboard.css">
-  <link rel="stylesheet" href="css/hoursfilter.css">
+  <link rel="stylesheet" href="css/scheduler.css">
+  <link rel="stylesheet" href="css/modals.css">
   <link rel="stylesheet" href="css/undo.css">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap">
+
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
   <script src="js/lib/fullcalendar.min.js"></script>
 </head>
 <body>
 
-  <!-- ============ Login Screen ============ -->
+  <!-- ==================== Login ==================== -->
   <div class="login-screen" id="loginScreen">
     <div class="login-card">
       <div class="login-icon">📋</div>
@@ -39,11 +44,12 @@
     </div>
   </div>
 
-  <!-- ============ Main App ============ -->
+  <!-- ==================== App ==================== -->
+  <!-- Inline display:none on containers is runtime state toggled by app.js -->
   <div id="appContainer" style="display:none;">
     <h1>To Do List</h1>
 
-    <div class="view-tabs">
+    <nav class="view-tabs">
       <button class="view-tab active" id="tabWhiteboard">📝 Whiteboard</button>
       <button class="view-tab" id="tabGrid">📊 Grid</button>
       <button class="view-tab" id="tabPlanner">🗓️ Planner</button>
@@ -52,134 +58,10 @@
         <button class="undo-btn" id="undoBtn" title="Undo (⌘Z)" aria-label="Undo" disabled>↶</button>
         <button class="undo-btn" id="redoBtn" title="Redo (⌘⇧Z)" aria-label="Redo" disabled>↷</button>
       </div>
-    </div>
+    </nav>
 
-    <!-- ===== GRID VIEW ===== -->
-    <div id="gridViewContainer" style="display:none;">
-      <div class="toolbar">
-        <!-- utility cluster, far left -->
-        <div class="tb-group">
-          <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
-          <button class="icon-btn" id="refreshBtn" title="Refresh — sync with Google Calendar">🔄</button>
-        </div>
-
-        <!-- Primary -->
-        <button class="primary" id="addTaskBtn">+ Add Task</button>
-
-        <!-- Highlight subtasks estimated under X hours -->
-        <div class="hours-filter" id="hoursFilter" title="Highlight subtasks estimated under X hours">
-          <button class="hf-toggle" id="hoursFilterToggle" type="button">⏱ Under</button>
-          <input class="hf-input" id="hoursFilterInput" type="number" min="0" step="0.5"
-                 inputmode="decimal" placeholder="X" aria-label="Hours">
-          <span class="hf-unit">h</span>
-          <span class="hf-count" id="hoursFilterCount"></span>
-          <button class="hf-clear" id="hoursFilterClear" type="button" title="Turn off">×</button>
-        </div>
-
-        <div class="grid-nav-bar">
-          <div class="tb-segment grid-nav">
-            <button id="gridPrev">←</button>
-            <button id="gridToday">Today</button>
-            <button id="gridNext">→</button>
-          </div>
-        </div>
-        <!-- status + account pushed right -->
-        <div class="tb-right">
-          <span class="sync-badge" id="syncBadge">● Synced ✓</span>
-          <span class="auth-status connected" id="authStatus">Signed in ✓</span>
-          <button class="ghost-btn" id="authBtn">Sign out</button>
-        </div>
-      </div>
-
-              
-
-      <div class="sync-warning" id="syncWarning" style="display:none;">
-        ⚠️ <span id="syncWarningText"></span>
-      </div>
-
-      <div class="main-split">
-        <div class="grid-col">
-          <div class="grid-wrap" id="gridWrap"></div>
-          <label class="show-completed-mini" id="showCompletedLabel">
-            <input type="checkbox" id="showCompleted"> Show completed
-          </label>
-        </div>
-
-        <div class="day-view" id="dayView">
-          <div class="day-view-header">
-            <button id="dayPrev">←</button>
-            <div class="day-view-title" id="dayViewTitle">Today</div>
-            <button id="dayNext">→</button>
-          </div>
-          <button class="day-today-btn" id="dayToday">Jump to today</button>
-          <div class="day-view-body" id="dayViewBody"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== PLANNER VIEW ===== -->
-    <div id="plannerViewContainer" style="display:none;">
-      <div class="planner-toolbar">
-        <!-- ☰ mobile menu button (hidden on desktop) -->
-        <button class="icon-btn planner-menu-btn" id="plannerMenuBtn" title="Menu">☰</button>
-        <button class="icon-btn planner-nav-arrow" id="plannerPrevDay" title="Previous">‹</button>
-        <button class="planner-today-btn" id="plannerTodayBtn">Now</button>
-        <button class="icon-btn planner-nav-arrow" id="plannerNextDay" title="Next">›</button>
-        <!-- desktop items (hidden on mobile) -->
-        <button class="primary" id="plannerAddTaskBtn">+ Add Task</button>
-        <button id="plannerRefreshBtn">🔄 Refresh</button>
-        <label class="planner-hide-label" style="display:flex;align-items:center;gap:4px;font-size:13px;">
-          <input type="checkbox" id="hideScheduled"> Hide fully scheduled
-        </label>
-        <span class="planner-hint">Select a subtask below, then drag on the calendar to schedule it.</span>
-
-        <!-- mobile dropdown panel (hidden on desktop) -->
-        <div class="planner-menu-panel" id="plannerMenuPanel" style="display:none;">
-
-          <div class="pm-section">
-            <div class="pm-label">View</div>
-            <div class="pm-views">
-              <button data-view="timeGridDay">Day</button>
-              <button data-view="timeGridThreeDay">3 Day</button>
-              <button data-view="timeGridWeek">Week</button>
-              <button data-view="dayGridMonth">Month</button>
-            </div>
-          </div>
-
-          <div class="pm-section">
-            <label class="pm-check">
-              <input type="checkbox" id="hideScheduledMobile"> Hide fully scheduled
-            </label>
-            <button id="pmRefresh" class="pm-refresh">🔄 Refresh</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="planner-layout">
-        <div id="plannerCalendar"></div>
-
-        <div class="backlog-strip" id="backlogStrip">
-          <div class="backlog-header">Unscheduled &amp; In-Progress Subtasks</div>
-          <div class="backlog-cards" id="backlogCards">
-            <div class="backlog-empty">Backlog will appear here.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  <!-- ===== PROGRESS VIEW ===== -->
-    <div id="progressViewContainer" style="display:none;">
-      <div class="progress-toolbar">
-        <button id="progPrev">←</button>
-        <div class="progress-week-label" id="progWeekLabel">This Week</div>
-        <button id="progNext">→</button>
-        <button id="progThisWeek">Today</button>
-      </div>
-      <div class="progress-week" id="progressWeek"></div>
-    </div>
-
-  <!-- ===== WHITEBOARD VIEW ===== -->
-    <div id="whiteboardViewContainer">
+    <!-- ---------- Whiteboard ---------- -->
+    <section id="whiteboardViewContainer">
       <div class="wb-toolbar">
         <div class="wb-styles" role="group" aria-label="Line style">
           <button class="wb-style-btn" data-kind="category" title="Category (⌘1)">Category</button>
@@ -200,12 +82,128 @@
       <div class="wb-board">
         <div id="wbList"></div>
       </div>
-    </div>
+    </section>
 
+    <!-- ---------- Grid ---------- -->
+    <section id="gridViewContainer" style="display:none;">
+      <div class="toolbar">
+        <div class="tb-group">
+          <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
+          <button class="icon-btn" id="refreshBtn" title="Refresh — sync with Google Calendar">🔄</button>
+        </div>
+
+        <button class="primary" id="addTaskBtn">+ Add Task</button>
+
+        <div class="hours-filter" id="hoursFilter" title="Highlight subtasks estimated under X hours">
+          <button class="hf-toggle" id="hoursFilterToggle" type="button">⏱ Under</button>
+          <input class="hf-input" id="hoursFilterInput" type="number" min="0" step="0.5"
+                 inputmode="decimal" placeholder="X" aria-label="Hours">
+          <span class="hf-unit">h</span>
+          <span class="hf-count" id="hoursFilterCount"></span>
+          <button class="hf-clear" id="hoursFilterClear" type="button" title="Turn off">×</button>
+        </div>
+
+        <div class="grid-nav-bar">
+          <div class="tb-segment grid-nav">
+            <button id="gridPrev">←</button>
+            <button id="gridToday">Today</button>
+            <button id="gridNext">→</button>
+          </div>
+        </div>
+
+        <div class="tb-right">
+          <span class="sync-badge" id="syncBadge">● Synced ✓</span>
+          <span class="auth-status connected" id="authStatus">Signed in ✓</span>
+          <button class="ghost-btn" id="authBtn">Sign out</button>
+        </div>
+      </div>
+
+      <div class="sync-warning" id="syncWarning" style="display:none;">
+        ⚠️ <span id="syncWarningText"></span>
+      </div>
+
+      <div class="main-split">
+        <div class="grid-col">
+          <div class="grid-wrap" id="gridWrap"></div>
+          <label class="show-completed-mini" id="showCompletedLabel">
+            <input type="checkbox" id="showCompleted"> Show completed
+          </label>
+        </div>
+
+        <aside class="day-view" id="dayView">
+          <div class="day-view-header">
+            <button id="dayPrev">←</button>
+            <div class="day-view-title" id="dayViewTitle">Today</div>
+            <button id="dayNext">→</button>
+          </div>
+          <button class="day-today-btn" id="dayToday">Jump to today</button>
+          <div class="day-view-body" id="dayViewBody"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ---------- Planner ---------- -->
+    <section id="plannerViewContainer" style="display:none;">
+      <div class="planner-toolbar">
+        <button class="icon-btn planner-menu-btn" id="plannerMenuBtn" title="Menu">☰</button>
+        <button class="icon-btn planner-nav-arrow" id="plannerPrevDay" title="Previous">‹</button>
+        <button class="planner-today-btn" id="plannerTodayBtn">Now</button>
+        <button class="icon-btn planner-nav-arrow" id="plannerNextDay" title="Next">›</button>
+
+        <!-- Desktop only -->
+        <button class="primary" id="plannerAddTaskBtn">+ Add Task</button>
+        <button id="plannerRefreshBtn">🔄 Refresh</button>
+        <label class="planner-hide-label">
+          <input type="checkbox" id="hideScheduled"> Hide fully scheduled
+        </label>
+        <span class="planner-hint">Select a subtask below, then drag on the calendar to schedule it.</span>
+
+        <!-- Mobile dropdown (opened by ☰) -->
+        <div class="planner-menu-panel" id="plannerMenuPanel" style="display:none;">
+          <div class="pm-section">
+            <div class="pm-label">View</div>
+            <div class="pm-views">
+              <button data-view="timeGridDay">Day</button>
+              <button data-view="timeGridThreeDay">3 Day</button>
+              <button data-view="timeGridWeek">Week</button>
+              <button data-view="dayGridMonth">Month</button>
+            </div>
+          </div>
+          <div class="pm-section">
+            <label class="pm-check">
+              <input type="checkbox" id="hideScheduledMobile"> Hide fully scheduled
+            </label>
+            <button class="pm-refresh" id="pmRefresh">🔄 Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="planner-layout">
+        <div id="plannerCalendar"></div>
+        <div class="backlog-strip" id="backlogStrip">
+          <div class="backlog-header">Unscheduled &amp; In-Progress Subtasks</div>
+          <div class="backlog-cards" id="backlogCards">
+            <div class="backlog-empty">Backlog will appear here.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- Progress ---------- -->
+    <section id="progressViewContainer" style="display:none;">
+      <div class="progress-toolbar">
+        <button id="progPrev">←</button>
+        <div class="progress-week-label" id="progWeekLabel">This Week</div>
+        <button id="progNext">→</button>
+        <button id="progThisWeek">Today</button>
+      </div>
+      <div class="progress-week" id="progressWeek"></div>
+    </section>
   </div>
 
+  <!-- ==================== Dialogs ==================== -->
 
-  <!-- ============ Add/Edit Task Modal ============ -->
+  <!-- Add / edit task -->
   <div class="modal-backdrop" id="taskModalBackdrop">
     <div class="modal">
       <h2 id="taskModalTitle">Add Task</h2>
@@ -214,7 +212,7 @@
       <label>Subtasks</label>
       <div class="hint">Due date = ✕ on the grid. Est. hours = time to schedule.</div>
       <div id="subtaskList"></div>
-      <button style="margin-top:10px" id="addSubtaskBtn">+ Add subtask</button>
+      <button id="addSubtaskBtn">+ Add subtask</button>
       <div class="modal-actions">
         <button id="taskCancelBtn">Cancel</button>
         <button class="primary" id="taskSaveBtn">Save</button>
@@ -222,9 +220,9 @@
     </div>
   </div>
 
-  <!-- ============ Whiteboard: pick a task for a subtask ============ -->
+  <!-- Whiteboard: choose a task for a subtask -->
   <div class="modal-backdrop" id="wbPickBackdrop">
-    <div class="modal" style="width:min(440px,92vw)">
+    <div class="modal">
       <h2 id="wbPickTitle">Add to which task?</h2>
       <input type="text" id="wbPickFilter" placeholder="Search tasks, or type a new task name…">
       <div class="wb-pick-list" id="wbPickList"></div>
@@ -234,15 +232,12 @@
     </div>
   </div>
 
-  <!-- ============ Note Popup ============ -->
+  <!-- Note -->
   <div class="modal-backdrop" id="noteBackdrop">
-    <div class="modal" style="width:min(460px,92vw)">
+    <div class="modal">
       <h2 id="noteTitle">Note</h2>
-      <div id="noteContext" style="color:var(--muted);font-size:13px;margin:0 0 10px;"></div>
-      <textarea id="noteText" rows="8"
-        placeholder="Write a note…"
-        style="width:100%;resize:vertical;font-family:inherit;font-size:14px;
-               padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
+      <div id="noteContext"></div>
+      <textarea id="noteText" rows="8" placeholder="Write a note…"></textarea>
       <div class="modal-actions">
         <button id="noteCancelBtn">Cancel</button>
         <button class="primary" id="noteSaveBtn">Save note</button>
@@ -250,12 +245,11 @@
     </div>
   </div>
 
-  <!-- ============ Settings Modal ============ -->
+  <!-- Settings -->
   <div class="modal-backdrop" id="settingsBackdrop">
-    <div class="modal" style="width:min(420px,92vw)">
+    <div class="modal">
       <h2>⚙️ Settings</h2>
 
-      <!-- Calendar sync toggle -->
       <div class="settings-row">
         <div class="settings-row-text">
           <div class="settings-row-title">Sync to Google Calendar</div>
@@ -280,17 +274,14 @@
         </label>
       </div>
 
-      <!-- Expandable calendar picker -->
       <div class="settings-section">
         <button class="settings-expand" id="calExpandBtn">
           <span>Calendars to display</span>
           <span class="settings-chevron" id="calChevron">▸</span>
         </button>
         <div class="settings-expand-body" id="calExpandBody" style="display:none;">
-          <p style="color:var(--muted);font-size:12px;margin:4px 0 10px;">
-            Choose which calendars' events appear as gray busy blocks.
-          </p>
-          <div id="calPickerList" style="display:flex;flex-direction:column;gap:8px;"></div>
+          <p class="settings-hint">Choose which calendars' events appear as gray busy blocks.</p>
+          <div id="calPickerList"></div>
         </div>
       </div>
 
@@ -300,12 +291,10 @@
           <span class="settings-chevron" id="alwaysChevron">▸</span>
         </button>
         <div class="settings-expand-body" id="alwaysExpandBody" style="display:none;">
-          <p style="color:var(--muted);font-size:12px;margin:4px 0 10px;">
-            Always Tasks stay on the grid even when all their subtasks are done.
-          </p>
-          <div id="alwaysTaskList" style="display:flex;flex-direction:column;gap:6px;"></div>
-          <div style="display:flex;gap:6px;margin-top:10px;">
-            <input type="text" id="alwaysAddInput" placeholder="New always-task name…" style="flex:1;">
+          <p class="settings-hint">Always Tasks stay on the grid even when all their subtasks are done.</p>
+          <div id="alwaysTaskList"></div>
+          <div class="always-add-row">
+            <input type="text" id="alwaysAddInput" placeholder="New always-task name…">
             <button class="primary" id="alwaysAddBtn">Add</button>
           </div>
         </div>
@@ -318,7 +307,21 @@
     </div>
   </div>
 
-  <!-- ============ Full-screen Calendar Scheduler ============ -->
+  <!-- Calendar-event deletion choice -->
+  <div class="modal-backdrop" id="delDialogBackdrop">
+    <div class="modal">
+      <h2 id="delDialogTitle">Delete</h2>
+      <p id="delDialogMsg"></p>
+      <div id="delDialogOptions">
+        <button id="delFuture">Delete future calendar events only</button>
+        <button id="delAll">Delete ALL calendar events</button>
+        <button id="delNone">Keep all calendar events</button>
+        <button id="delCancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-screen scheduler -->
   <div class="cal-overlay" id="calOverlay">
     <div class="cal-header">
       <div class="cal-title" id="calTitle">Schedule Time</div>
@@ -337,28 +340,13 @@
     <div class="cal-grid-wrap" id="calGridWrap"></div>
   </div>
 
-  <!-- ============ Event Deletion Choice Dialog ============ -->
-  <div class="modal-backdrop" id="delDialogBackdrop">
-    <div class="modal" style="width:min(420px,92vw)">
-      <h2 id="delDialogTitle">Delete</h2>
-      <p id="delDialogMsg" style="color:var(--muted);font-size:14px;margin:0 0 8px;"></p>
-      <div id="delDialogOptions" style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
-        <button id="delFuture">Delete future calendar events only</button>
-        <button id="delAll">Delete ALL calendar events</button>
-        <button id="delNone">Keep all calendar events</button>
-        <button id="delCancel" style="margin-top:4px;color:var(--muted);">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============ Undo toast ============ -->
+  <!-- Undo toast -->
   <div class="undo-toast" id="undoToast" role="status" aria-live="polite">
     <span id="undoToastText"></span>
     <button class="undo-toast-btn" id="undoToastBtn">Undo</button>
     <button class="undo-toast-close" id="undoToastClose" aria-label="Dismiss">×</button>
   </div>
 
-  <!-- ============ App entry point ============ -->
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

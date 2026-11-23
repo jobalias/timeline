@@ -1,76 +1,91 @@
-import { startOfDay, sameDay } from '../utils.js';
+import { startOfDay, sameDay, ymdLocal, fmtShortDate } from '../core/dates.js';
+import { escapeHtml } from '../utils.js';
+import { DragController } from '../core/DragController.js';
+import { View } from '../core/View.js';
 
-// local YYYY-MM-DD (no UTC shift)
-const ymdLocal = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const DAYS_BEFORE = 30;   // days shown before dayStart
+const DAYS_AFTER = 30;    // days shown after dayStart
+const DAYS_TO_SHOW = DAYS_BEFORE + DAYS_AFTER + 1;
+
+// Hours bar is full at 8h; past that it shifts orange (8h) → red (12h+)
+const FULL_DAY = 8;
+const RED_AT = 12;
+const MIN_BAR_PCT = 6;
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const DRAG_DELAY = {
+  holdMs: 350,           // touch: press-and-hold before a drag starts
+  mouseThreshold: 4,     // mouse: px moved before a drag starts
+  touchScrollSlop: 8,    // touch: px moved before the hold that means "scrolling"
+};
+const DRAG_SCROLL = {
+  edge: 70,              // px from the strip's edge that triggers auto-scroll
+  step: 14,
+  repeatMs: 16,
+};
+const DRAG_TITLE = 'title="Drag to the day you actually did it"';
+
 const fmtHours = (h) => (Math.round(h * 100) / 100).toString();
+const plural = (n) => (n === 1 ? '' : 's');
+const sumHours = (entries) => entries.reduce((sum, e) => sum + (parseFloat(e.hoursSpent) || 0), 0);
 
-export class ProgressView {
+function groupBy(items, keyOf) {
+  const groups = new Map();
+  items.forEach((item) => {
+    const key = keyOf(item);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  });
+  return groups;
+}
+
+export class ProgressView extends View {
   constructor(store) {
+    super();
     this.store = store;
-    this.isActive = false;
-    this.dayStart = startOfDay(new Date()); // normalize to midnight
+    this.dayStart = startOfDay(new Date());
     this.container = document.getElementById('progressViewContainer');
     this.weekEl = document.getElementById('progressWeek');
     this.labelEl = document.getElementById('progWeekLabel');
-    this._drag = null;
 
-    document.getElementById('progPrev')
-      ?.addEventListener('click', () => this._shiftWeek(-7));
-    document.getElementById('progNext')
-      ?.addEventListener('click', () => this._shiftWeek(7));
-    document.getElementById('progThisWeek')
-      ?.addEventListener('click', () => this._goToday());
+    document.getElementById('progPrev')?.addEventListener('click', () => this._shiftWeek(-7));
+    document.getElementById('progNext')?.addEventListener('click', () => this._shiftWeek(7));
+    document.getElementById('progThisWeek')?.addEventListener('click', () => this._goToday());
 
-    this._bindDrag();
+    this.dragger = this._createDragger();
   }
 
-  activate() { this.isActive = true; this.render({ scrollToToday: true }); }
-  deactivate() { this.isActive = false; this._cancelDrag(); }
-  // data changed (e.g. after a drop or an undo) → redraw but keep the scroll position
-  refresh() { if (this.isActive && !this._drag) this.render(); }
+  // ----- Public API -----
 
-  _shiftWeek(days) {
-    this.dayStart.setDate(this.dayStart.getDate() + days);
+  activate() {
+    this.isActive = true;
     this.render({ scrollToToday: true });
   }
-  _goToday() {
-    this.dayStart = startOfDay(new Date());
-    this.render({ scrollToToday: true });
+
+  deactivate() {
+    super.deactivate();
+    this.dragger.cancel();
+  }
+
+  // Data changed (e.g. after a drop or an undo) → redraw but keep the scroll position
+  refresh() {
+    if (!this.dragger.isDragging) super.refresh();
   }
 
   render({ scrollToToday = false } = {}) {
     if (!this.isActive) return;
 
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    // keep each entry's position in the log so a drag can point back at it
+    // Keep each entry's position in the log so a drag can point back at it
     const log = this.store.getCompletionLog().map((e, i) => ({ ...e, _i: i }));
+    const byDay = groupBy(log, (e) => ymdLocal(new Date(e.completedAt)));
     const today = startOfDay(new Date());
 
-    const DAYS_BEFORE = 30;   // days to show before dayStart
-    const DAYS_AFTER = 30;   // days to show after dayStart
-    const DAYS_TO_SHOW = DAYS_BEFORE + DAYS_AFTER + 1;
-
-    // range starts DAYS_BEFORE before dayStart
     const rangeStart = startOfDay(new Date(this.dayStart));
     rangeStart.setDate(rangeStart.getDate() - DAYS_BEFORE);
-
     const rangeEnd = new Date(rangeStart);
     rangeEnd.setDate(rangeEnd.getDate() + DAYS_TO_SHOW - 1);
-    const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    this.labelEl.textContent = `${fmt(rangeStart)} – ${fmt(rangeEnd)}`;
-
-    // group log entries by local day once
-    const byDay = new Map();
-    log.forEach((e) => {
-      const key = ymdLocal(new Date(e.completedAt));
-      if (!byDay.has(key)) byDay.set(key, []);
-      byDay.get(key).push(e);
-    });
-
-    const hoursOf = (entries) => entries.reduce((s, e) => s + (parseFloat(e.hoursSpent) || 0), 0);
-    // bar is full at 8h; past that it shifts orange (8h) → red (12h+)
-    const FULL_DAY = 8, RED_AT = 12;
+    this.labelEl.textContent = `${fmtShortDate(rangeStart)} – ${fmtShortDate(rangeEnd)}`;
 
     const prevScroll = this.weekEl.scrollLeft;
     this.weekEl.innerHTML = '';
@@ -78,46 +93,7 @@ export class ProgressView {
     for (let i = 0; i < DAYS_TO_SHOW; i++) {
       const day = new Date(rangeStart);
       day.setDate(day.getDate() + i);
-      const key = ymdLocal(day);
-      const dayEntries = byDay.get(key) || [];
-      const hours = hoursOf(dayEntries);
-
-      const col = document.createElement('div');
-      col.className = 'prog-day';
-      col.dataset.date = key;
-      if (sameDay(day, today)) col.classList.add('prog-today');
-      if (day > today) col.classList.add('prog-future');
-
-      const pct = Math.max(6, Math.min(100, Math.round((hours / FULL_DAY) * 100)));
-      const over = hours > FULL_DAY
-        ? Math.round(Math.min(1, (hours - FULL_DAY) / (RED_AT - FULL_DAY)) * 100)
-        : null;   // 0 = orange … 100 = red
-      const overStyle = over === null ? '' : ` style="--over:${over}%"`;
-      const hoursRow = hours > 0
-        ? `<div class="prog-hours-day${over === null ? '' : ' is-over'}"${overStyle}
-               title="${fmtHours(hours)} hours logged${over === null ? '' : ' — over 8h'}">
-             <div class="prog-hours-bar"><span style="width:${pct}%"></span></div>
-             <div class="prog-hours-num">${fmtHours(hours)}h</div>
-           </div>`
-        : `<div class="prog-hours-day is-empty"><div class="prog-hours-num">—</div></div>`;
-
-      const header = `
-        <div class="prog-day-header">
-          <div class="prog-dow">${dayNames[day.getDay()]}</div>
-          <div class="prog-date">${day.getDate()}</div>
-          <div class="prog-month">${day.toLocaleDateString(undefined, { month: 'short' })}</div>
-          ${hoursRow}
-        </div>`;
-
-      const body = dayEntries.length === 0
-        ? `<div class="prog-empty"></div>`
-        : `<div class="prog-items">${this._renderDayEntries(dayEntries)}</div>`;
-
-      const count = dayEntries.length;
-      const footer = count > 0 ? `<div class="prog-count">${count} done 🎉</div>` : '';
-
-      col.innerHTML = header + body + footer;
-      this.weekEl.appendChild(col);
+      this.weekEl.appendChild(this._renderDayColumn(day, byDay.get(ymdLocal(day)) || [], today));
     }
 
     this._renderSummary(log);
@@ -125,61 +101,130 @@ export class ProgressView {
     else this.weekEl.scrollLeft = prevScroll;
   }
 
-  _scrollToToday() {
-    const todayCol = this.weekEl.querySelector('.prog-today');
-    if (todayCol) {
-      todayCol.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }
+  // ----- Navigation -----
+
+  _shiftWeek(days) {
+    this.dayStart.setDate(this.dayStart.getDate() + days);
+    this.render({ scrollToToday: true });
   }
 
+  _goToday() {
+    this.dayStart = startOfDay(new Date());
+    this.render({ scrollToToday: true });
+  }
+
+  _scrollToToday() {
+    this.weekEl.querySelector('.prog-today')
+      ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+
+  // ----- Rendering -----
+
+  _renderDayColumn(day, entries, today) {
+    const col = document.createElement('div');
+    col.className = 'prog-day';
+    col.dataset.date = ymdLocal(day);
+    if (sameDay(day, today)) col.classList.add('prog-today');
+    if (day > today) col.classList.add('prog-future');
+
+    const header = `
+        <div class="prog-day-header">
+          <div class="prog-dow">${DAY_NAMES[day.getDay()]}</div>
+          <div class="prog-date">${day.getDate()}</div>
+          <div class="prog-month">${day.toLocaleDateString(undefined, { month: 'short' })}</div>
+          ${this._renderHoursRow(sumHours(entries))}
+        </div>`;
+
+    const body = entries.length === 0
+      ? `<div class="prog-empty"></div>`
+      : `<div class="prog-items">${this._renderDayEntries(entries)}</div>`;
+
+    const footer = entries.length > 0 ? `<div class="prog-count">${entries.length} done 🎉</div>` : '';
+
+    col.innerHTML = header + body + footer;
+    return col;
+  }
+
+  _renderHoursRow(hours) {
+    if (hours <= 0) {
+      return `<div class="prog-hours-day is-empty"><div class="prog-hours-num">—</div></div>`;
+    }
+
+    const pct = Math.max(MIN_BAR_PCT, Math.min(100, Math.round((hours / FULL_DAY) * 100)));
+    const isOver = hours > FULL_DAY;
+    // 0% = orange … 100% = red
+    const overPct = Math.round(Math.min(1, (hours - FULL_DAY) / (RED_AT - FULL_DAY)) * 100);
+
+    return `<div class="prog-hours-day${isOver ? ' is-over' : ''}"${isOver ? ` style="--over:${overPct}%"` : ''}
+               title="${fmtHours(hours)} hours logged${isOver ? ' — over 8h' : ''}">
+             <div class="prog-hours-bar"><span style="width:${pct}%"></span></div>
+             <div class="prog-hours-num">${fmtHours(hours)}h</div>
+           </div>`;
+  }
+
+  // A task finished that day gets a trophy card; other completions are single chips
   _renderDayEntries(entries) {
-    const byTask = new Map();
-    entries.forEach((e) => {
-      const key = e.taskId || e.taskName;
-      if (!byTask.has(key)) byTask.set(key, []);
-      byTask.get(key).push(e);
-    });
-
-    const drag = 'title="Drag to the day you actually did it"';
     let html = '';
-    byTask.forEach((taskEntries) => {
-      const celebrated = taskEntries.some((e) => e.taskJustCompleted);
-      const taskName = taskEntries[0].taskName;
+    groupBy(entries, (e) => e.taskId || e.taskName).forEach((taskEntries) => {
+      html += taskEntries.some((e) => e.taskJustCompleted)
+        ? this._renderTaskComplete(taskEntries)
+        : taskEntries.map((e) => this._renderChip(e)).join('');
+    });
+    return html;
+  }
 
-      if (celebrated) {
-        const bullets = taskEntries.map((e) =>
-          `<li class="prog-drag" data-log="${e._i}" ${drag}>${this._esc(e.subtaskName)}${
-            e.hoursSpent ? ` <span class="prog-hours">· ${e.hoursSpent}h</span>` : ''
-          }</li>`
-        ).join('');
+  _renderTaskComplete(taskEntries) {
+    const bullets = taskEntries.map((e) =>
+      `<li class="prog-drag" data-log="${e._i}" ${DRAG_TITLE}>${escapeHtml(e.subtaskName)}${
+        e.hoursSpent ? ` <span class="prog-hours">· ${e.hoursSpent}h</span>` : ''
+      }</li>`
+    ).join('');
 
-        html += `
+    return `
           <div class="prog-task-complete">
-            <div class="prog-tc-header">🏆 ${this._esc(taskName)}</div>
+            <div class="prog-tc-header">🏆 ${escapeHtml(taskEntries[0].taskName)}</div>
             <div class="prog-tc-label">Task Complete!</div>
             <ul class="prog-tc-list">${bullets}</ul>
           </div>`;
-      } else {
-        taskEntries.forEach((e) => {
-          html += `
-            <div class="prog-chip prog-drag" data-log="${e._i}" ${drag}>
+  }
+
+  _renderChip(e) {
+    return `
+            <div class="prog-chip prog-drag" data-log="${e._i}" ${DRAG_TITLE}>
               <div class="prog-chip-check">✓</div>
               <div class="prog-chip-text">
-                <div class="prog-chip-sub">${this._esc(e.subtaskName)}</div>
-                <div class="prog-chip-task">${this._esc(e.taskName)}${
+                <div class="prog-chip-sub">${escapeHtml(e.subtaskName)}</div>
+                <div class="prog-chip-task">${escapeHtml(e.taskName)}${
                   e.hoursSpent ? ` · ${e.hoursSpent}h` : ''
                 }</div>
               </div>
             </div>`;
-        });
-      }
-    });
-
-    return html;
   }
 
-  // bottom banner: an all-time running count, just to feel good
+  // Bottom banner: an all-time running count, just to feel good
   _renderSummary(log) {
+    const summary = this._summaryEl();
+    const total = log.length;
+    if (total === 0) {
+      summary.innerHTML = 'Nothing checked off yet — your first one is waiting! 🌱';
+      return;
+    }
+
+    const tasksDone = log.filter((e) => e.taskJustCompleted).length;
+    const todayKey = ymdLocal(new Date());
+    const doneToday = log.filter((e) => ymdLocal(new Date(e.completedAt)) === todayKey).length;
+
+    summary.innerHTML = `
+      <div class="prog-total-num">${total.toLocaleString()}</div>
+      <div class="prog-total-label">subtask${plural(total)} completed all-time 🎉</div>
+      <div class="prog-total-sub">
+        ${tasksDone ? `🏆 <strong>${tasksDone}</strong> whole task${plural(tasksDone)} finished` : ''}
+        ${tasksDone && doneToday ? ' · ' : ''}
+        ${doneToday ? `<strong>${doneToday}</strong> today` : ''}
+      </div>`;
+  }
+
+  _summaryEl() {
     let summary = document.getElementById('progWeekSummary');
     if (!summary) {
       summary = document.createElement('div');
@@ -187,160 +232,76 @@ export class ProgressView {
       summary.className = 'prog-week-summary';
       this.container.appendChild(summary);
     }
-    const total = log.length;
-    const tasksDone = log.filter((e) => e.taskJustCompleted).length;
-    if (total === 0) {
-      summary.innerHTML = 'Nothing checked off yet — your first one is waiting! 🌱';
-      return;
-    }
-    const today = ymdLocal(new Date());
-    const doneToday = log.filter((e) => ymdLocal(new Date(e.completedAt)) === today).length;
-    summary.innerHTML = `
-      <div class="prog-total-num">${total.toLocaleString()}</div>
-      <div class="prog-total-label">subtask${total === 1 ? '' : 's'} completed all-time 🎉</div>
-      <div class="prog-total-sub">
-        ${tasksDone ? `🏆 <strong>${tasksDone}</strong> whole task${tasksDone === 1 ? '' : 's'} finished` : ''}
-        ${tasksDone && doneToday ? ' · ' : ''}
-        ${doneToday ? `<strong>${doneToday}</strong> today` : ''}
-      </div>`;
+    return summary;
   }
 
-  // ==================================================================
-  //  DRAG A COMPLETED ITEM TO ANOTHER DAY
+  // ----- Drag a completed item to another day -----
   //  mouse: drag after a few px · touch: press & hold, then drag
-  // ==================================================================
-  _bindDrag() {
-    const HOLD_MS = 350;
 
-    this.weekEl.addEventListener('pointerdown', (e) => {
-      const item = e.target.closest('.prog-drag');
-      if (!item || e.button > 0) return;
-      const p = {
-        item, pointerId: e.pointerId, type: e.pointerType,
-        x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, started: false,
-      };
-      this._pending = p;
-      if (p.type !== 'mouse') {
-        p.holdTimer = setTimeout(() => {
-          if (this._pending === p) this._startDrag(p);
-        }, HOLD_MS);
-      }
+  _createDragger() {
+    return new DragController(this.weekEl, {
+      handle: '.prog-drag',
+      delay: DRAG_DELAY,
+      bodyClass: 'prog-is-dragging',
+      cancelOnEscape: true,
+      blockTouchScroll: true,   // once a touch drag has started, the page mustn't scroll under the finger
+      autoScroll: {
+        el: this.weekEl, axis: 'x', ...DRAG_SCROLL,
+        onScroll: (drag, x, y) => this._updateTarget(drag, x, y),
+      },
+      onStart: (item, from) => this._startDrag(item, from),
+      onMove: (drag, x, y) => this._moveDrag(drag, x, y),
+      onEnd: (drag, cancelled) => this._endDrag(drag, cancelled),
     });
-
-    window.addEventListener('pointermove', (e) => {
-      const p = this._pending;
-      if (p && e.pointerId === p.pointerId && !p.started) {
-        const moved = Math.hypot(e.clientX - p.x0, e.clientY - p.y0);
-        if (p.type === 'mouse') {
-          if (moved > 4) { p.x = e.clientX; p.y = e.clientY; this._startDrag(p); }
-        } else if (moved > 8) {
-          clearTimeout(p.holdTimer);   // finger moved before the hold → it's a scroll
-          this._pending = null;
-        }
-        return;
-      }
-      if (this._drag && e.pointerId === this._drag.pointerId) {
-        e.preventDefault();
-        this._moveDrag(e.clientX, e.clientY);
-      }
-    }, { passive: false });
-
-    const finish = (e, cancelled) => {
-      if (this._pending && e.pointerId === this._pending.pointerId) {
-        clearTimeout(this._pending.holdTimer);
-        this._pending = null;
-      }
-      if (this._drag && e.pointerId === this._drag.pointerId) this._endDrag(cancelled);
-    };
-    window.addEventListener('pointerup', (e) => finish(e, false));
-    window.addEventListener('pointercancel', (e) => finish(e, true));
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this._drag) this._endDrag(true); });
-
-    // once a touch drag has started, stop the page from scrolling under the finger
-    document.addEventListener('touchmove', (e) => { if (this._drag) e.preventDefault(); }, { passive: false });
   }
 
-  _startDrag(p) {
-    p.started = true;
-    this._pending = null;
-    const item = p.item;
+  // Lifts a floating copy of the item that follows the pointer
+  _startDrag(item, from) {
     const rect = item.getBoundingClientRect();
     const ghost = item.cloneNode(true);
     ghost.classList.add('prog-ghost');
     ghost.style.width = rect.width + 'px';
     document.body.appendChild(ghost);
 
-    const fromCol = item.closest('.prog-day');
-    this._drag = {
-      pointerId: p.pointerId,
+    item.classList.add('prog-dragging');
+    navigator.vibrate?.(15);
+    return {
       logIndex: +item.dataset.log,
-      fromDate: fromCol?.dataset.date,
+      fromDate: item.closest('.prog-day')?.dataset.date,
       item, ghost,
-      offX: p.x0 - rect.left, offY: p.y0 - rect.top,
+      offX: from.x - rect.left, offY: from.y - rect.top,
       target: null,
     };
-    item.classList.add('prog-dragging');
-    document.body.classList.add('prog-is-dragging');
-    navigator.vibrate?.(15);
-    this._moveDrag(p.x, p.y);
   }
 
-  _moveDrag(x, y) {
-    const d = this._drag;
-    d.ghost.style.transform = `translate(${x - d.offX}px, ${y - d.offY}px) rotate(-2deg)`;
-    this._updateTarget(x, y);
-
-    // auto-scroll the strip near its left/right edges
-    const r = this.weekEl.getBoundingClientRect();
-    const edge = 70;
-    clearInterval(d.scrollTimer);
-    let dir = 0;
-    if (x < r.left + edge) dir = -1;
-    else if (x > r.right - edge) dir = 1;
-    if (dir) {
-      d.scrollTimer = setInterval(() => {
-        this.weekEl.scrollLeft += dir * 14;
-        if (this._drag) this._updateTarget(x, y);   // columns slide under a still pointer
-      }, 16);
-    }
+  _moveDrag(drag, x, y) {
+    drag.ghost.style.transform = `translate(${x - drag.offX}px, ${y - drag.offY}px) rotate(-2deg)`;
+    this._updateTarget(drag, x, y);
   }
 
-  _updateTarget(x, y) {
-    const d = this._drag;
-    // which day column is under the pointer?
-    d.ghost.style.display = 'none';
+  // Highlights the day column under the pointer; future days can't be drop targets
+  _updateTarget(drag, x, y) {
+    drag.ghost.style.display = 'none';
     const under = document.elementFromPoint(x, y);
-    d.ghost.style.display = '';
+    drag.ghost.style.display = '';
+
     const col = under?.closest?.('.prog-day');
-    const ok = col && !col.classList.contains('prog-future') ? col : null;
+    const target = col && !col.classList.contains('prog-future') ? col : null;
+    if (drag.target === target) return;
 
-    if (d.target !== ok) {
-      d.target?.classList.remove('prog-drop-target');
-      ok?.classList.add('prog-drop-target');
-      d.target = ok;
-    }
+    drag.target?.classList.remove('prog-drop-target');
+    target?.classList.add('prog-drop-target');
+    drag.target = target;
   }
 
-  _endDrag(cancelled) {
-    const d = this._drag;
-    if (!d) return;
-    clearInterval(d.scrollTimer);
-    d.ghost.remove();
-    d.item.classList.remove('prog-dragging');
-    d.target?.classList.remove('prog-drop-target');
-    document.body.classList.remove('prog-is-dragging');
-    this._drag = null;
+  _endDrag(drag, cancelled) {
+    drag.ghost.remove();
+    drag.item.classList.remove('prog-dragging');
+    drag.target?.classList.remove('prog-drop-target');
 
-    const to = d.target?.dataset.date;
-    if (!cancelled && to && to !== d.fromDate) {
-      this.store.moveCompletion(d.logIndex, to);   // undoable; store notifies → refresh()
+    const toDate = drag.target?.dataset.date;
+    if (!cancelled && toDate && toDate !== drag.fromDate) {
+      this.store.moveCompletion(drag.logIndex, toDate);   // undoable; store notifies → refresh()
     }
-  }
-
-  _cancelDrag() { if (this._drag) this._endDrag(true); }
-
-  _esc(s) {
-    return String(s).replace(/[&<>"']/g, (c) =>
-      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 }

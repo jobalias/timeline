@@ -1,60 +1,133 @@
-/* ===== SPLIT LAYOUT + DAY VIEW PANEL ===== */
-.main-split { display: flex; gap: var(--gap-lg); align-items: stretch; }
-.main-split .grid-wrap { flex: 2; margin: 0; min-width: 0; }
+/* ============================================================
+   DAY VIEW — Grid page split layout (grid | day panel) and the
+   single-day calendar panel. Hidden on phones.
+   ============================================================ */
 
+/* ---- Split layout ---- */
+.main-split {
+  display: flex;
+  gap: var(--gap-lg);
+  align-items: stretch;
+}
+.main-split .grid-wrap {
+  flex: 2;
+  margin: 0;
+  min-width: 0;
+  overflow: auto;   /* outranks the phone layout's overflow: visible (grid.css) */
+}
+
+/* ---- Day view panel ---- */
 .day-view {
-  flex: 1; min-width: var(--dayview-width); height: var(--dayview-height);
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); overflow: hidden;
-  display: flex; flex-direction: column;
+  flex: 1;
+  min-width: var(--dayview-width);
+  height: var(--dayview-height);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .day-view-header {
-  display: flex; align-items: center; gap: var(--gap-sm);
-  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
 }
-.day-view-header button { padding: 4px 12px; font-size: 16px; border-radius: var(--radius); flex-shrink: 0; }
-.day-view-title { flex: 1; text-align: center; font-weight: 700; font-size: var(--fs-body); }
-.day-today-btn { margin: 8px 12px 0; padding: 6px; font-size: var(--fs-small); border-radius: var(--radius); }
-.day-view-body { flex: 1; overflow-y: auto; position: relative; margin-top: var(--gap-sm); }
+.day-view-header button {
+  padding: 4px 12px;
+  font-size: 16px;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+.day-view-title {
+  flex: 1;
+  text-align: center;
+  font-weight: 700;
+  font-size: var(--fs-body);
+}
+.day-today-btn {
+  margin: 8px 12px 0;
+  padding: 6px;
+  font-size: var(--fs-small);
+  border-radius: var(--radius);
+}
+.day-view-body {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  margin-top: var(--gap-sm);
+}
 
-.dv-grid { position: relative; height: calc(var(--dayview-hour-px) * 24 * 1px); }
-.dv-hour { position: absolute; left: 0; right: 0; height: calc(var(--dayview-hour-px) * 1px); border-top: 1px solid var(--hour-line); }
+/* ---- Hour grid + blocks ---- */
+.dv-grid {
+  position: relative;
+  height: calc(var(--dayview-hour-px) * 24 * 1px);
+}
+.dv-hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(var(--dayview-hour-px) * 1px);
+  border-top: 1px solid var(--hour-line);
+}
 .dv-hour-label {
-  position: absolute; top: -8px; left: 6px; font-size: var(--fs-tiny); color: var(--muted);
-  background: var(--panel); padding: 0 2px;
+  position: absolute;
+  top: -8px;
+  left: 6px;
+  font-size: var(--fs-tiny);
+  color: var(--muted);
+  background: var(--panel);
+  padding: 0 2px;
 }
 
 .dv-block {
-  position: absolute; left: 54px; right: 8px;
-  border-radius: 6px; padding: 3px 6px; color: var(--c-white);
-  overflow: hidden; box-shadow: var(--shadow-block); box-sizing: border-box;
+  position: absolute;
+  left: 54px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 3px 6px;
+  color: var(--c-white);
+  overflow: hidden;
+  box-shadow: var(--shadow-block);
+  box-sizing: border-box;
 }
-.dv-block-title { font-size: var(--fs-small); font-weight: 700; line-height: 1.2; }
-.dv-block-sub   { font-size: var(--fs-tiny); opacity: 0.9; }
+.dv-block-title {
+  font-size: var(--fs-small);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.dv-block-sub {
+  font-size: var(--fs-tiny);
+  opacity: 0.9;
+}
 
 .dv-busy {
-  position: absolute; left: 54px; right: 8px;
-  background: var(--busy-bg); color: var(--busy-text);
-  border-radius: 6px; padding: 2px 6px; font-size: var(--fs-tiny);
-  overflow: hidden; border-left: 3px solid var(--busy-border); box-sizing: border-box;
+  position: absolute;
+  left: 54px;
+  right: 8px;
+  background: var(--busy-bg);
+  color: var(--busy-text);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: var(--fs-tiny);
+  overflow: hidden;
+  border-left: 3px solid var(--busy-border);
+  box-sizing: border-box;
 }
 
-@media (max-width: 900px) {
-  .main-split { flex-direction: column; }
-  .day-view { height: 50vh; min-width: 0; }
-}
-
-/* red "now" line on the day view */
+/* Red "now" line, aligned with the blocks; ::before is the dot at its left end */
 .dv-now-line {
   position: absolute;
-  left: 54px;            /* align with blocks (which start at left:54px) */
+  left: 54px;
   right: 8px;
   height: 2px;
   background: var(--danger);
-  z-index: 6;            /* above blocks/busy, below nothing important */
+  z-index: 6;
   pointer-events: none;
 }
-.dv-now-line::before {   /* the dot at the left, like Google Calendar */
+.dv-now-line::before {
   content: '';
   position: absolute;
   left: -5px;
@@ -63,4 +136,22 @@
   height: 8px;
   border-radius: 50%;
   background: var(--danger);
+}
+
+/* ============================================================
+   Medium screens (≤900px) — panel drops below the grid
+   ============================================================ */
+@media (max-width: 900px) {
+  .main-split { flex-direction: column; }
+  .day-view {
+    height: 50vh;
+    min-width: 0;
+  }
+}
+
+/* ============================================================
+   Phone (≤768px) — day panel hidden (the card list replaces it)
+   ============================================================ */
+@media (max-width: 768px) {
+  .main-split .day-view { display: none !important; }
 }

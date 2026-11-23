@@ -1,43 +1,41 @@
 import { Subtask } from './Subtask.js';
 
-// Pleasant, distinct palette — 60 colors, interleaved by hue
-// so consecutive colors contrast (no grouped reds/blues/etc.)
-// Reads the autumn task palette from CSS custom properties (--task-01 … --task-NN)
+const MAX_PALETTE_SIZE = 40;
+const FALLBACK_PALETTE = ['#b14e34', '#6b8e4e', '#c47d3f', '#3d7068'];
+
+// Reads the task palette from CSS custom properties (--task-01 … --task-NN),
+// stopping at the first one that isn't defined.
 function readPaletteFromCss() {
   const styles = getComputedStyle(document.documentElement);
   const colors = [];
-  for (let i = 1; i <= 40; i++) {
-    const v = styles.getPropertyValue(`--task-${String(i).padStart(2, '0')}`).trim();
-    if (!v) break;        // stop at first missing one
-    colors.push(v);
+  for (let i = 1; i <= MAX_PALETTE_SIZE; i++) {
+    const color = styles.getPropertyValue(`--task-${String(i).padStart(2, '0')}`).trim();
+    if (!color) break;
+    colors.push(color);
   }
-  // fallback so the app never breaks if CSS hasn't loaded
-  return colors.length ? colors : ['#b14e34', '#6b8e4e', '#c47d3f', '#3d7068'];
+  // Fallback so the app never breaks if the CSS hasn't loaded
+  return colors.length ? colors : FALLBACK_PALETTE;
 }
 
 export const PALETTE = readPaletteFromCss();
 
-let _colorIndex = 0;
+let colorIndex = 0;
 
-export function nextColor(used_colors = null) {
-  if (used_colors && used_colors.length > 0) {
-    // find the first palette color not already in use (keeps them distinct + in order)
-    const available = PALETTE.find((c) => !used_colors.includes(c));
-    if (available) return available;
-    // all 60 used → fall back to cycling by count
-    return PALETTE[used_colors.length % PALETTE.length];
+// Picks the first palette color not in `usedColors` (keeping colors distinct and
+// in palette order); without usage info, simply cycles through the palette.
+export function nextColor(usedColors = null) {
+  if (usedColors && usedColors.length > 0) {
+    const available = PALETTE.find((c) => !usedColors.includes(c));
+    return available || PALETTE[usedColors.length % PALETTE.length];
   }
-  // no used-colors info → just cycle sequentially
-  const c = PALETTE[_colorIndex % PALETTE.length];
-  _colorIndex++;
-  return c;
+  return PALETTE[colorIndex++ % PALETTE.length];
 }
 
 export class Task {
   constructor({ id, name = '', subtasks = [], color = null, note = '', persistent = false } = {}) {
     this.id = id || Date.now().toString();
     this.name = name;
-    this.note = note;         
+    this.note = note;
     this.persistent = persistent;
     this.subtasks = subtasks.map((s) => new Subtask(s));
     this.color = color || nextColor();
@@ -47,8 +45,8 @@ export class Task {
     return {
       id: this.id,
       name: this.name,
-      note: this.note,     
-      persistent: this.persistent,  
+      note: this.note,
+      persistent: this.persistent,
       color: this.color,
       subtasks: this.subtasks.map((s) => s.toJSON()),
     };

@@ -1,130 +1,316 @@
-/* ===== PROGRESS VIEW ===== */
-.progress-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: var(--gap-lg); }
-.progress-toolbar button { padding: 6px 14px; border-radius: var(--radius); }
-.progress-week-label { font-weight: 700; font-size: 16px; min-width: 180px; text-align: center; }
+/* ============================================================
+   PROGRESS VIEW — Week strip of completed work, per-day hours.
+   ============================================================ */
 
+/* ---- Toolbar ---- */
+.progress-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--gap-lg);
+}
+.progress-toolbar button {
+  padding: 6px 14px;
+  border-radius: var(--radius);
+}
+.progress-week-label {
+  font-weight: 700;
+  font-size: 16px;
+  min-width: 180px;
+  text-align: center;
+}
+
+/* ---- Week strip ---- */
 .progress-week {
-  display: flex; gap: var(--gap-md);
-  overflow-x: auto; overflow-y: hidden;
-  padding-bottom: var(--gap-md); scroll-snap-type: x proximity;
-  height: calc(100dvh - 280px);   
+  display: flex;
+  gap: var(--gap-md);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--gap-md);
+  scroll-snap-type: x proximity;
+  height: calc(100dvh - 280px);
   align-items: stretch;
 }
 .progress-week::-webkit-scrollbar { height: 10px; }
-.progress-week::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 5px; }
-.progress-week::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 5px; }
+.progress-week::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 5px;
+}
+.progress-week::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+}
 .progress-week::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
+/* ---- Day column ---- */
 .prog-day {
-  flex: 0 0 var(--prog-day-width); scroll-snap-align: start;
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  padding: 10px; display: flex; flex-direction: column; gap: var(--gap-sm);
-  height: 100%; min-height: 0;   /* fill the strip, don't grow to content */
+  flex: 0 0 var(--prog-day-width);
+  scroll-snap-align: start;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  height: 100%;   /* fill the strip, don't grow to content */
+  min-height: 0;
 }
-.prog-day.prog-today { border-color: var(--accent); box-shadow: 0 0 0 2px var(--c-blue-tint-15); }
+.prog-day.prog-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--c-blue-tint-15);
+}
 
-.prog-day-header { text-align: center; padding-bottom: 6px; border-bottom: 1px dashed var(--border); }
-.prog-dow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-.prog-date { font-size: 22px; font-weight: 800; color: var(--text); }
+.prog-day-header {
+  text-align: center;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border);
+}
+.prog-dow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.prog-date {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
 .prog-today .prog-date { color: var(--accent); }
-.prog-month { font-size: var(--fs-tiny); color: var(--muted); text-transform: uppercase; }
+.prog-month {
+  font-size: var(--fs-tiny);
+  color: var(--muted);
+  text-transform: uppercase;
+}
 
 .prog-items {
-  display: flex; flex-direction: column; gap: var(--gap-sm);
-  flex: 1 1 auto; min-height: 0;
-  overflow-y: auto;   /* scroll within a day if it has many cards */
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;   /* a busy day scrolls on its own */
 }
 .prog-empty { flex: 1; }
 .prog-count {
-  text-align: center; font-size: 11px; font-weight: 600; color: var(--green);
-  margin-top: auto; flex: 0 0 auto;   /* ← added flex to keep it pinned */
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  margin-top: auto;   /* pinned to the bottom */
+  flex: 0 0 auto;
 }
+/* ---- Completed-subtask chip ---- */
 .prog-chip {
-  display: flex; align-items: flex-start; gap: 6px;
-  background: var(--chip-bg); border: 1px solid var(--chip-border); border-radius: 10px;
-  padding: 6px 8px; animation: prog-pop 0.3s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  border-radius: 10px;
+  padding: 6px 8px;
+  animation: prog-pop 0.3s ease;
 }
 .prog-chip-check {
-  flex-shrink: 0; width: 18px; height: 18px;
-  background: var(--green); color: var(--c-white); border-radius: 50%;
-  font-size: 11px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  background: var(--green);
+  color: var(--c-white);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
 }
 .prog-chip-text { min-width: 0; }
-.prog-chip-sub  { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; }
-.prog-chip-task { font-size: 11px; color: var(--muted); line-height: 1.2; }
+.prog-chip-sub {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+}
+.prog-chip-task {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.2;
+}
 
+/* ---- Whole-task celebration card ---- */
 .prog-task-complete {
   background: linear-gradient(135deg, var(--gold-1) 0%, var(--gold-2) 50%, var(--gold-3) 100%);
-  border: 2px solid var(--gold-border); border-radius: var(--radius-lg); padding: 12px;
-  box-shadow: 0 4px 12px var(--c-gold-tint); animation: prog-celebrate 0.5s ease;
+  border: 2px solid var(--gold-border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  box-shadow: 0 4px 12px var(--c-gold-tint);
+  animation: prog-celebrate 0.5s ease;
 }
-.prog-tc-header { font-size: 16px; font-weight: 800; color: var(--gold-header); line-height: 1.25; margin-bottom: 2px; }
+.prog-tc-header {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--gold-header);
+  line-height: 1.25;
+  margin-bottom: 2px;
+}
 .prog-tc-label {
-  font-size: 12px; font-weight: 700; color: var(--gold-label);
-  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-label);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
 }
-.prog-tc-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
-.prog-tc-list li { font-size: 13px; font-weight: 600; color: var(--gold-text); line-height: 1.3; }
-.prog-hours { font-weight: 500; color: var(--gold-hours); }
+.prog-tc-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.prog-tc-list li {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold-text);
+  line-height: 1.3;
+}
+.prog-hours {
+  font-weight: 500;
+  color: var(--gold-hours);
+}
 
 .prog-week-summary {
-  margin-top: var(--gap-lg); text-align: center; font-size: 15px; color: var(--text);
-  padding: 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  margin-top: var(--gap-lg);
+  text-align: center;
+  font-size: 15px;
+  color: var(--text);
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
-/* ---- all-time running count ---- */
+/* ---- All-time running count ---- */
 .prog-total-num {
-  font-family: var(--font-serif); font-size: 40px; font-weight: 700; line-height: 1;
+  font-family: var(--font-serif);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
   color: var(--green);
 }
-.prog-total-label { font-size: 15px; font-weight: 600; margin-top: 4px; }
-.prog-total-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.prog-total-label {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.prog-total-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
 .prog-total-sub:empty { display: none; }
 
-/* ---- hours per day (in the day header) ---- */
+/* ---- Hours per day (in the day header) ---- */
 .prog-hours-day {
-  display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
 }
 .prog-hours-bar {
-  flex: 1; height: 6px; border-radius: 3px; background: var(--neutral-bg); overflow: hidden;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--neutral-bg);
+  overflow: hidden;
 }
-.prog-hours-bar span { display: block; height: 100%; border-radius: 3px; background: var(--green); }
-.prog-hours-num { font-size: 12px; font-weight: 700; color: var(--green); min-width: 28px; text-align: right; }
-/* over 8h: orange → red (--over: 0% at 8h … 100% at 12h+) */
+.prog-hours-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green);
+}
+.prog-hours-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  min-width: 28px;
+  text-align: right;
+}
+/* Over 8h: orange → red (--over runs 0% at 8h … 100% at 12h+) */
 .prog-hours-day.is-over { --over-color: color-mix(in srgb, var(--danger) var(--over), var(--c-orange)); }
 .prog-hours-day.is-over .prog-hours-bar span { background: var(--over-color); }
 .prog-hours-day.is-over .prog-hours-num { color: var(--over-color); }
 .prog-hours-day.is-empty { justify-content: center; }
-.prog-hours-day.is-empty .prog-hours-num { color: var(--c-gray-350); font-weight: 400; text-align: center; }
+.prog-hours-day.is-empty .prog-hours-num {
+  color: var(--c-gray-350);
+  font-weight: 400;
+  text-align: center;
+}
 
-/* ---- drag a completed item to another day ---- */
-.prog-drag { cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+/* ---- Drag a completed item to another day ---- */
+.prog-drag {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
 .prog-tc-list li.prog-drag { border-radius: 4px; }
 .prog-tc-list li.prog-drag:hover { background: var(--c-overlay-06); }
 .prog-chip.prog-drag:hover { border-color: var(--green); }
 .prog-dragging { opacity: 0.3; }
 .prog-ghost {
-  position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none;
-  list-style: none; margin: 0;
-  background: var(--chip-bg); border: 1px solid var(--green); border-radius: 10px;
-  padding: 6px 8px; box-shadow: var(--shadow-modal); opacity: 0.95;
-  font-size: 13px; font-weight: 600; color: var(--gold-text);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  pointer-events: none;
+  list-style: none;
+  margin: 0;
+  background: var(--chip-bg);
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  padding: 6px 8px;
+  box-shadow: var(--shadow-modal);
+  opacity: 0.95;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold-text);
   animation: none;
 }
-body.prog-is-dragging, body.prog-is-dragging * { cursor: grabbing !important; user-select: none; }
+body.prog-is-dragging, body.prog-is-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
 .prog-day.prog-drop-target {
-  border-color: var(--green); background: var(--chip-bg);
+  border-color: var(--green);
+  background: var(--chip-bg);
   box-shadow: 0 0 0 3px var(--chip-border);
 }
 body.prog-is-dragging .prog-day.prog-future { opacity: 0.45; }
 
+/* ---- Animations ---- */
 @keyframes prog-pop {
-  0% { transform: scale(0.9); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 @keyframes prog-celebrate {
-  0% { transform: scale(0.85) rotate(-2deg); opacity: 0; }
+  0% {
+    transform: scale(0.85) rotate(-2deg);
+    opacity: 0;
+  }
   60% { transform: scale(1.04) rotate(1deg); }
-  100% { transform: scale(1) rotate(0); opacity: 1; }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
 }

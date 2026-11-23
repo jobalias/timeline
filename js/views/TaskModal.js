@@ -1,98 +1,105 @@
 import { Task } from '../models/Task.js';
 import { Subtask } from '../models/Subtask.js';
 import { escapeHtml } from '../utils.js';
+import { startOfDay, parseLocalDate } from '../core/dates.js';
+import { Modal } from '../core/Modal.js';
 
-export class TaskModal {
+const normalizeName = (name) => name.trim().toLowerCase();
+
+export class TaskModal extends Modal {
   constructor(store, googleCalendar, deleteDialog, { onAfterSave = () => {} } = {}) {
+    super('taskModalBackdrop');
     this.store = store;
     this.gcal = googleCalendar;
     this.deleteDialog = deleteDialog;
     this.onAfterSave = onAfterSave;
     this.editingId = null;
-    // track events to delete on save (chosen when ✕ clicked)
-    this._pendingEventDeletions = [];
+    this._afterSaveOnce = null;
+    this._pendingEventDeletions = [];   // [{ subtask, scope }] — executed on Save, dropped on cancel
 
-    this.backdrop = document.getElementById('taskModalBackdrop');
     this.title = document.getElementById('taskModalTitle');
     this.nameInput = document.getElementById('taskName');
     this.subtaskList = document.getElementById('subtaskList');
+    this.saveBtn = document.getElementById('taskSaveBtn');
 
-    document.getElementById('addSubtaskBtn')
-      .addEventListener('click', () => this._addSubtaskRow());
-    document.getElementById('taskCancelBtn')
-      .addEventListener('click', () => this.close());
-    document.getElementById('taskSaveBtn')
-      .addEventListener('click', () => this._save());
+    document.getElementById('addSubtaskBtn').addEventListener('click', () => this._addSubtaskRow());
+    document.getElementById('taskCancelBtn').addEventListener('click', () => this.close());
+    this.saveBtn.addEventListener('click', () => this._save());
     this.nameInput.addEventListener('input', () => {
-      if (this.editingId) return;
-      this._validateName();
+      if (!this.editingId) this._validateName();
     });
   }
 
-  // prefill (optional): { name, subtasks: [{ name }] } — used by the Whiteboard
-  openNew(prefill = null) {
-    this.editingId = null;
-    this._afterSaveOnce = null;
-    this._pendingEventDeletions = []; // ← reset
-    this.title.textContent = 'Add Task';
-    this.nameInput.value = prefill?.name || '';
-    this.subtaskList.innerHTML = '';
-    const pre = prefill?.subtasks || [];
-    pre.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '', due: st.due || '', wbId: st.wbId }));
-    if (pre.length === 0) this._addSubtaskRow();
-    this.backdrop.classList.add('open');
+  // ---------- public API ----------
 
-    this.nameInput.classList.remove('input-error');
-    document.getElementById('taskSaveBtn').disabled = false;
-    this._clearNameNote();
+  // prefill (optional): { name, subtasks: [{ name, estHours, due, wbId }] } — used by the Whiteboard
+  openNew(prefill = null) {
+    this._reset(null, 'Add Task', prefill?.name || '');
+    const prefilled = prefill?.subtasks || [];
+    prefilled.forEach((st) => this._addPrefilledRow(st));
+    if (prefilled.length === 0) this._addSubtaskRow();
+    this.show();
+
     if (prefill?.name) {
       this._validateName();
       this._focusFirstEmptyField();
     }
   }
 
-  // extraSubtasks (optional): [{ name }] appended as new rows — used by the Whiteboard
+  // extraSubtasks (optional): [{ name, estHours, due, wbId }] appended as new rows — used by the Whiteboard
   openEdit(id, { extraSubtasks = [] } = {}) {
-    const t = this.store.find(id);
-    if (!t) return;
-    this.editingId = id;
-    this._afterSaveOnce = null;
-    this._pendingEventDeletions = []; // ← reset
-    this.title.textContent = extraSubtasks.length ? `Add to "${t.name}"` : 'Edit Task';
-    this.nameInput.value = t.name;
-    this.subtaskList.innerHTML = '';
-    t.subtasks.forEach((st) => this._addSubtaskRow(st));
+    const task = this.store.find(id);
+    if (!task) return;
+    this._reset(id, extraSubtasks.length ? `Add to "${task.name}"` : 'Edit Task', task.name);
+    task.subtasks.forEach((st) => this._addSubtaskRow(st));
     const firstNew = this.subtaskList.children.length;
-    extraSubtasks.forEach((st) => this._addSubtaskRow({ name: st.name, estHours: st.estHours || '', due: st.due || '', wbId: st.wbId }));
-    if (t.subtasks.length === 0 && extraSubtasks.length === 0) this._addSubtaskRow();
-    this.backdrop.classList.add('open');
+    extraSubtasks.forEach((st) => this._addPrefilledRow(st));
+    if (task.subtasks.length === 0 && extraSubtasks.length === 0) this._addSubtaskRow();
+    this.show();
 
-    this.nameInput.classList.remove('input-error');
-    document.getElementById('taskSaveBtn').disabled = false;
-    this._clearNameNote();
-
-    // bring the new rows into view and highlight them
-    if (extraSubtasks.length) {
-      const rows = [...this.subtaskList.children].slice(firstNew);
-      rows.forEach((r) => r.classList.add('subtask-row-new'));
-      rows[0].scrollIntoView({ block: 'center' });
-      this._focusFirstEmptyField(rows[0]);
-    }
+    if (extraSubtasks.length) this._highlightNewRows(firstNew);
   }
 
-  // Run fn(savedId) once after the next successful save (cleared on cancel/reopen)
+  // Run fn(savedId, wbLinks) once after the next successful save (cleared on cancel/reopen)
   setAfterSaveOnce(fn) { this._afterSaveOnce = fn; }
 
-  _focusFirstEmptyField(scope = this.subtaskList) {
-    const el = [...scope.querySelectorAll('input[type=date], input[type=number]')]
-      .find((i) => !i.value);
-    if (el) setTimeout(() => el.focus(), 50);
+  close() {
+    super.close();
+    this._afterSaveOnce = null;
+    this._pendingEventDeletions = [];   // cancelled → don't delete anything
   }
 
-  close() {
-    this.backdrop.classList.remove('open');
+  // ---------- opening ----------
+  _reset(editingId, title, name) {
+    this.editingId = editingId;
     this._afterSaveOnce = null;
-    this._pendingEventDeletions = []; // ← reset (don't delete if they cancelled)
+    this._pendingEventDeletions = [];
+    this.title.textContent = title;
+    this.nameInput.value = name;
+    this.subtaskList.innerHTML = '';
+  }
+
+  show() {
+    super.show();
+    this._setNameState({ error: false });
+  }
+
+  // bring the appended rows into view and highlight them
+  _highlightNewRows(fromIndex) {
+    const rows = [...this.subtaskList.children].slice(fromIndex);
+    rows.forEach((r) => r.classList.add('subtask-row-new'));
+    rows[0].scrollIntoView({ block: 'center' });
+    this._focusFirstEmptyField(rows[0]);
+  }
+
+  _focusFirstEmptyField(scope = this.subtaskList) {
+    const field = [...scope.querySelectorAll('input[type=date], input[type=number]')].find((i) => !i.value);
+    if (field) setTimeout(() => field.focus(), 50);
+  }
+
+  // ---------- subtask rows ----------
+  _addPrefilledRow(st) {
+    this._addSubtaskRow({ name: st.name, estHours: st.estHours || '', due: st.due || '', wbId: st.wbId });
   }
 
   _addSubtaskRow(data = {}) {
@@ -112,125 +119,53 @@ export class TaskModal {
             value="${data.estHours || ''}"></div>
       </div>`;
 
-    row.querySelector('.del-btn')
-      .addEventListener('click', () => this._removeSubtaskRow(row));
-
+    row.querySelector('.del-btn').addEventListener('click', () => this._removeSubtaskRow(row));
     this.subtaskList.appendChild(row);
   }
 
   async _removeSubtaskRow(row) {
     const subtaskId = row.dataset.subtaskId;
+    const subtask = subtaskId && this.editingId
+      ? this.store.find(this.editingId)?.subtasks.find((s) => s.id === subtaskId)
+      : null;
 
-    // If it's a brand-new row (no ID) or we're adding a task, just remove it
-    if (!subtaskId || !this.editingId) {
+    // brand-new row, or nothing saved behind it → just drop it
+    if (!subtask) {
       row.remove();
       return;
     }
 
-    // Find the subtask in the store to check for calendar events
-    const task = this.store.find(this.editingId);
-    const st = task?.subtasks.find((s) => s.id === subtaskId);
-
-    if (!st) {
-      row.remove();
-      return;
-    }
-
-    const hasEvents = st.blocks.some((b) => b.eventId);
-
+    const hasEvents = subtask.blocks.some((b) => b.eventId);
     if (!hasEvents || !this.gcal.isAuthed) {
-      // no events → simple confirm
-      if (confirm(`Remove subtask "${st.name}"?`)) {
-        row.remove();
-      }
+      if (confirm(`Remove subtask "${subtask.name}"?`)) row.remove();
       return;
     }
 
-    // has events → ask what to do with them
     const choice = await this.deleteDialog.open({
-      title: `Remove "${st.name}"?`,
+      title: `Remove "${subtask.name}"?`,
       message: 'This subtask has calendar events. What should happen to them?',
     });
+    if (choice === 'cancel') return;
 
-    if (choice === 'cancel') return; // don't remove the row
-
-    // record the event-deletion intent (executed on Save)
+    // 'none' keeps the events; the others are deleted on Save
     if (choice === 'future' || choice === 'all') {
-      this._pendingEventDeletions.push({ subtask: st, scope: choice });
+      this._pendingEventDeletions.push({ subtask, scope: choice });
     }
-    // 'none' → keep events, just remove the row
-
     row.remove();
   }
 
+  // ---------- saving ----------
   async _save() {
     const name = this.nameInput.value.trim();
     if (!name) { alert('Please enter a task name'); return; }
 
-    const rows = this.subtaskList.querySelectorAll('.subtask-row');
-    const subtasks = [];
-    const wbLinks = [];   // [{ wbId, subtaskId }] — whiteboard lines saved in this modal
-    rows.forEach((r) => {
-      const inputs = r.querySelectorAll('input');
-      const stName = inputs[0].value.trim();
-      if (!stName) return;
-      const st = new Subtask({
-        id: r.dataset.subtaskId || null,
-        name: stName,
-        due: inputs[1].value,
-        estHours: inputs[2].value,
-      });
-      subtasks.push(st);
-      if (r.dataset.wbId) wbLinks.push({ wbId: r.dataset.wbId, subtaskId: st.id });
-    });
+    const { subtasks, wbLinks } = this._collectSubtasks();
+    const result = this.editingId
+      ? this._saveEdit(name, subtasks)
+      : this._saveNew(name, subtasks);
+    if (!result) return;
+    const { savedId, newSubtaskIndices } = result;
 
-    let savedId;
-    let newSubtaskIndices = [];
-
-    if (this.editingId) {
-      const existing = this.store.find(this.editingId);
-      const existingIds = new Set(existing.subtasks.map((s) => s.id));
-
-      this.store.update(this.editingId, { name, subtasks });
-      savedId = this.editingId;
-
-      const updated = this.store.find(savedId);
-      updated.subtasks.forEach((s, i) => {
-        if (!existingIds.has(s.id)) newSubtaskIndices.push(i);
-      });
-    } else {
-      // not editing — check for a name match
-      const { state, match } = this._classifyName(name);
-
-      if (state === 'blocked') {
-        // shouldn't happen (save is disabled), but guard anyway
-        this._validateName();
-        return;
-      }
-
-      if (state === 'mergeable' && match) {
-        // append NEW subtasks directly to the existing task — don't touch old ones
-        const startIndex = match.subtasks.length;
-
-        // `subtasks` here are the new Subtask instances from the modal (done=false, correct)
-        match.subtasks.push(...subtasks);
-
-        // persist + notify
-        this.store._save();
-
-        savedId = match.id;
-        // new subtasks occupy indices [startIndex ... end]
-        newSubtaskIndices = subtasks.map((_, i) => startIndex + i);
-      } else {
-        // truly new task
-        const task = new Task({ name, subtasks });
-        this.store.add(task);
-        savedId = task.id;
-        newSubtaskIndices = task.subtasks.map((_, i) => i);
-      }
-    }
-
-    // execute any pending calendar-event deletions from removed subtasks
     await this._executePendingDeletions();
 
     const afterOnce = this._afterSaveOnce;
@@ -241,23 +176,72 @@ export class TaskModal {
     this.onAfterSave(savedId, newSubtaskIndices);
   }
 
+  // subtasks from the filled-in rows, plus [{ wbId, subtaskId }] for rows that came from the whiteboard
+  _collectSubtasks() {
+    const subtasks = [];
+    const wbLinks = [];
+    this.subtaskList.querySelectorAll('.subtask-row').forEach((row) => {
+      const [nameInput, dueInput, hoursInput] = row.querySelectorAll('input');
+      const stName = nameInput.value.trim();
+      if (!stName) return;
+      const st = new Subtask({
+        id: row.dataset.subtaskId || null,
+        name: stName,
+        due: dueInput.value,
+        estHours: hoursInput.value,
+      });
+      subtasks.push(st);
+      if (row.dataset.wbId) wbLinks.push({ wbId: row.dataset.wbId, subtaskId: st.id });
+    });
+    return { subtasks, wbLinks };
+  }
+
+  _saveEdit(name, subtasks) {
+    const savedId = this.editingId;
+    const previousIds = new Set(this.store.find(savedId).subtasks.map((s) => s.id));
+    this.store.update(savedId, { name, subtasks });
+
+    const newSubtaskIndices = [];
+    this.store.find(savedId).subtasks.forEach((s, i) => {
+      if (!previousIds.has(s.id)) newSubtaskIndices.push(i);
+    });
+    return { savedId, newSubtaskIndices };
+  }
+
+  // returns null when the name is blocked by an ongoing task
+  _saveNew(name, subtasks) {
+    const { state, match } = this._classifyName(name);
+
+    if (state === 'blocked') {
+      this._validateName();   // save is disabled in this state, but guard anyway
+      return null;
+    }
+
+    if (state === 'mergeable') {
+      // append the new subtasks to the existing task — leave its old ones untouched
+      const startIndex = this.store.appendSubtasks(match.id, subtasks);
+      return { savedId: match.id, newSubtaskIndices: subtasks.map((_, i) => startIndex + i) };
+    }
+
+    const task = new Task({ name, subtasks });
+    this.store.add(task);
+    return { savedId: task.id, newSubtaskIndices: task.subtasks.map((_, i) => i) };
+  }
+
   async _executePendingDeletions() {
     if (!this._pendingEventDeletions.length || !this.gcal.isAuthed) {
       this._pendingEventDeletions = [];
       return;
     }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+
+    const today = startOfDay(new Date());
 
     for (const { subtask, scope } of this._pendingEventDeletions) {
-      for (const b of subtask.blocks) {
-        if (!b.eventId) continue;
-        if (scope === 'future') {
-          const blockDate = new Date(b.date + 'T00:00:00');
-          if (blockDate < today) continue;
-        }
+      for (const block of subtask.blocks) {
+        if (!block.eventId) continue;
+        if (scope === 'future' && parseLocalDate(block.date) < today) continue;
         try {
-          await this.gcal.deleteEvent(b.eventId);
+          await this.gcal.deleteEvent(block.eventId);
         } catch (e) {
           console.warn('Failed to delete event for removed subtask:', e);
         }
@@ -265,11 +249,11 @@ export class TaskModal {
     }
     this._pendingEventDeletions = [];
   }
+
+  // ---------- name validation ----------
   _findMatch(name) {
-    const norm = name.trim().toLowerCase();
-    return this.store.getAll().find(
-      (t) => t.name.trim().toLowerCase() === norm && t.id !== this.editingId
-    );
+    const target = normalizeName(name);
+    return this.store.getAll().find((t) => normalizeName(t.name) === target && t.id !== this.editingId);
   }
 
   _isTaskDone(t) {
@@ -277,41 +261,32 @@ export class TaskModal {
   }
 
   // { state: 'ok' | 'blocked' | 'mergeable', match }
+  // a finished or empty namesake can absorb the new subtasks; an ongoing one blocks the name
   _classifyName(name) {
     const match = this._findMatch(name);
     if (!match) return { state: 'ok', match: null };
-    // Option A: completed OR empty → mergeable; ongoing → blocked
     const mergeable = this._isTaskDone(match) || match.subtasks.length === 0;
     return { state: mergeable ? 'mergeable' : 'blocked', match };
   }
 
   _validateName() {
     const name = this.nameInput.value.trim();
-    const saveBtn = document.getElementById('taskSaveBtn');
-
-    if (!name) {
-      this.nameInput.classList.remove('input-error');
-      saveBtn.disabled = false;
-      this._clearNameNote();
-      return 'ok';
-    }
-
-    const { state } = this._classifyName(name);
+    const state = name ? this._classifyName(name).state : 'ok';
 
     if (state === 'blocked') {
-      this.nameInput.classList.add('input-error');
-      saveBtn.disabled = true;
-      this._showNameNote('A task with this name already exists.');
+      this._setNameState({ error: true, note: 'A task with this name already exists.' });
     } else if (state === 'mergeable') {
-      this.nameInput.classList.remove('input-error');
-      saveBtn.disabled = false;
-      this._showNameNote('Matches an existing task — your subtasks will be added to it.', true);
+      this._setNameState({ error: false, note: 'Matches an existing task — your subtasks will be added to it.', info: true });
     } else {
-      this.nameInput.classList.remove('input-error');
-      saveBtn.disabled = false;
-      this._clearNameNote();
+      this._setNameState({ error: false });
     }
-    return state;
+  }
+
+  _setNameState({ error, note = '', info = false }) {
+    this.nameInput.classList.toggle('input-error', error);
+    this.saveBtn.disabled = error;
+    if (note) this._showNameNote(note, info);
+    else this._clearNameNote();
   }
 
   _showNameNote(msg, info = false) {

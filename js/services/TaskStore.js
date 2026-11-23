@@ -1,438 +1,61 @@
 import { Task, PALETTE } from '../models/Task.js';
-import {_getSoonestDueDate } from '../utils.js';
+import { _getSoonestDueDate } from '../utils.js';
+import { UndoHistory } from './store/UndoHistory.js';
+import { LocalSaver } from './store/LocalSaver.js';
+import { DriveSync } from './store/DriveSync.js';
+import { CalendarSync } from './store/CalendarSync.js';
 
-const STORAGE_KEY = 'taskGrid';
-const UNDO_LIMIT = 5;        // how many actions you can undo
-const CHAIN_MS = 400;        // saves this close together (one action doing 2 saves) = one undo step
-
+// TaskStore owns the app's data (tasks, completion log, whiteboard, settings) and is the
+// one object the rest of the app talks to; undo, saving and calendar sync are delegated.
 export class TaskStore {
   constructor() {
-    this.completionLog = []; 
-    this.calendarSyncEnabled = true;
-    this.whiteboard = [];   // [{ id, kind: 'category'|'task'|'subtask', text, added }]
-    this.tasks = this._loadLocal();
+    const saved = LocalSaver.load();
+    this.tasks = saved.tasks;
+    this.completionLog = saved.completionLog;
+    this.calendarSyncEnabled = saved.calendarSyncEnabled;
+    this.whiteboard = saved.whiteboard; // [{ id, kind: 'category'|'task'|'subtask', text, added }]
     this.listeners = [];
-    this.used_colors = [];
-    this.drive = null;
-    this.syncStatusFn = () => {};
-    this._saveTimer = null;
-    this._saving = false;
-    this._pendingSave = false;
-    this._retryTimer = null;
-    this._retryCount = 0;
 
-    // ---- undo / redo (snapshots of tasks + completion log + whiteboard) ----
-    this._undo = [];
-    this._redo = [];
-    this._snap = this._serialize();
-    this._lastKey = null;
-    this._lastChangeAt = 0;
-    this.historyFns = [];
-  }
-
-  // ==================== Undo / redo ====================
-  onHistory(fn) { this.historyFns.push(fn); }
-  canUndo() { return this._undo.length > 0; }
-  canRedo() { return this._redo.length > 0; }
-
-  _serialize() {
-    return JSON.stringify({
-      tasks: this.tasks.map((t) => t.toJSON()),
-      completionLog: this.completionLog,
-      whiteboard: this.whiteboard,
+    this.history = new UndoHistory(() => this._serialize());
+    this.sync = new DriveSync({
+      snapshot: () => LocalSaver.toJSON(this),
+      hasData: () => this.tasks.length > 0,
+      apply: (data) => this._applyDriveData(data),
     });
+    this.calendar = new CalendarSync(this);
   }
 
-  _emitHistory(deleted = null) {
-    const info = { canUndo: this.canUndo(), canRedo: this.canRedo(), deleted };
-    this.historyFns.forEach((fn) => fn(info));
-  }
+  // ---------- subscriptions ----------
+  subscribe(fn) { this.listeners.push(fn); }
+  onSyncStatus(fn) { this.sync.onStatus(fn); }
+  onHistory(fn) { this.history.onChange(fn); }
 
-  // Called on every save. opts.history === false → not an undo step (e.g. calendar sync).
-  // opts.coalesce = key → consecutive saves with the same key (typing in one line) merge.
-  _recordHistory({ history = true, coalesce = null } = {}) {
-    const now = this._serialize();
-    if (now === this._snap) return;
-    const prev = this._snap;
-    this._snap = now;
-    if (!history) return;
+  _notify() { this.listeners.forEach((fn) => fn()); }
 
-    const t = Date.now();
-    const merge = (coalesce && coalesce === this._lastKey) ||
-                  (!coalesce && !this._lastKey && t - this._lastChangeAt < CHAIN_MS);
-    if (!merge || this._undo.length === 0) {
-      this._undo.push(prev);
-      if (this._undo.length > UNDO_LIMIT) this._undo.shift();
-    }
-    this._redo = [];
-    this._lastKey = coalesce;
-    this._lastChangeAt = t;
-    this._emitHistory(this._describeDeletion(prev, now));
-  }
-
-  // "Deleted task “X”" etc. when something disappeared, so the UI can offer a quick Undo
-  _describeDeletion(prevJson, nowJson) {
-    try {
-      const a = JSON.parse(prevJson), b = JSON.parse(nowJson);
-      const ids = (arr) => new Set(arr.map((x) => x.id));
-      const bt = ids(b.tasks);
-      const goneTasks = a.tasks.filter((t) => !bt.has(t.id));
-      const subsOf = (tasks) => tasks.flatMap((t) => t.subtasks.map((s) => s));
-      const bs = ids(subsOf(b.tasks));
-      const goneSubs = subsOf(a.tasks.filter((t) => bt.has(t.id))).filter((s) => !bs.has(s.id));
-      const bw = ids(b.whiteboard || []);
-      const goneLines = (a.whiteboard || []).filter((l) => !bw.has(l.id) && (l.text || '').trim());
-
-      const total = goneTasks.length + goneSubs.length + goneLines.length;
-      if (total === 0) return null;
-      if (total > 1) return `Deleted ${total} items`;
-      const q = (s) => `“${(s || '').trim()}”`;
-      if (goneTasks.length) return `Deleted task ${q(goneTasks[0].name)}`;
-      if (goneSubs.length) return `Deleted subtask ${q(goneSubs[0].name)}`;
-      return `Deleted ${q(goneLines[0].text)} from the whiteboard`;
-    } catch { return null; }
-  }
-
-  undo() {
-    if (!this._undo.length) return false;
-    this._redo.push(this._snap);
-    this._restore(this._undo.pop());
-    return true;
-  }
-
-  redo() {
-    if (!this._redo.length) return false;
-    this._undo.push(this._snap);
-    if (this._undo.length > UNDO_LIMIT) this._undo.shift();
-    this._restore(this._redo.pop());
-    return true;
-  }
-
-  _restore(json) {
-    const d = JSON.parse(json);
-    this.tasks = (d.tasks || []).map((t) => new Task(t));
-    this.completionLog = d.completionLog || [];
-    this.whiteboard = d.whiteboard || [];
-    this._snap = json;
-    this._lastKey = null;
-    this._lastChangeAt = 0;
-    this._persist();
-    this._emitHistory();
-  }
-
-  _resetHistory() {
-    this._undo = [];
-    this._redo = [];
-    this._snap = this._serialize();
-    this._lastKey = null;
-    this._emitHistory();
-  }
-
+  // ---------- settings ----------
   getCalendarSyncEnabled() {
     return this.calendarSyncEnabled !== false; // default true
   }
 
   setCalendarSyncEnabled(enabled) {
     this.calendarSyncEnabled = enabled;
-    this._save();
+    this.save();
   }
-
-  // ---------- Drive wiring ----------
-  attachDrive(drive) {
-    this.drive = drive;
-  }
-
-  onSyncStatus(fn) {
-    this.syncStatusFn = fn;
-  }
-
-  // Check all incomplete subtasks' blocks against Google Calendar.
-  // Removes deleted events, updates moved/resized ones.
-  async reconcileWithCalendar(googleCalendar) {
-    if (!googleCalendar || !googleCalendar.isAuthed) return false;
-
-    // Collect the date range of all blocks
-    let minDate = null, maxDate = null;
-    const allEventIds = new Set();
-    for (const task of this.tasks) {
-      for (const st of task.subtasks) {
-        for (const b of st.blocks) {
-          if (b.eventId) allEventIds.add(b.eventId);
-          if (b.date) {
-            const d = new Date(b.date + 'T00:00:00');
-            if (!minDate || d < minDate) minDate = d;
-            if (!maxDate || d > maxDate) maxDate = d;
-          }
-        }
-      }
-    }
-
-    if (!minDate) return false; // no blocks
-
-    // widen range a bit
-    minDate.setDate(minDate.getDate() - 1);
-    maxDate.setDate(maxDate.getDate() + 2);
-
-    // ONE batch fetch instead of per-block
-    let events;
-    try {
-      events = await googleCalendar.getEvents(minDate, maxDate, ['primary']);
-    } catch (e) {
-      console.warn('Reconcile batch fetch failed', e);
-      return false;
-    }
-
-    // build a lookup: eventId → event
-    const eventMap = new Map();
-    events.forEach((ev) => eventMap.set(ev.id, ev));
-
-    let changed = false;
-
-    for (const task of this.tasks) {
-      for (const st of task.subtasks) {
-        const keptBlocks = [];
-        for (const b of st.blocks) {
-          // No eventId → app-only block → just keep it (don't delete!)
-          if (!b.eventId) {
-            keptBlocks.push(b);   // ← CHANGED: keep app-only blocks
-            continue;
-          }
-
-          let real;
-          try {
-            real = await googleCalendar.getEventById(b.eventId);
-          } catch (e) {
-            keptBlocks.push(b); // network error → keep
-            continue;
-          }
-
-          if (real === null) {
-            // event gone → clear eventId, KEEP block
-            b.eventId = null;
-            changed = true;
-            keptBlocks.push(b);   // ← CHANGED: keep the block
-            continue;
-          }
-
-          // event exists → sync time (for incomplete subtasks)
-          if (!st.done) {
-            const newDate = this._ymdLocal(real.start);
-            const newStart = this._hhmm(real.start);
-            const newHours = (real.end - real.start) / 3600000;
-            if (b.date !== newDate || b.start !== newStart ||
-                Math.abs(b.hoursNum - newHours) > 0.001) {
-              b.date = newDate;
-              b.start = newStart;
-              b.hours = Math.round(newHours * 100) / 100;
-              changed = true;
-            }
-          }
-
-          // (description → note sync, if you have Chunk 3)
-          const eventDesc = real.description || '';
-          if (eventDesc !== (st.note || '')) {
-            st.note = eventDesc;
-            changed = true;
-          }
-
-          keptBlocks.push(b);
-        }
-
-        st.blocks = keptBlocks;
-      }
-    }
-
-    if (changed) this._save({ history: false });   // calendar sync isn't an undoable action
-    return changed;
-  }
-
-  // local-time YYYY-MM-DD (avoid UTC shift)
-  _ymdLocal(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-  _hhmm(d) {
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
-
-  // Called after Google connects: pull from Drive (last-write-wins = Drive wins on load)
-  async loadFromDrive() {
-    if (!this.drive) { this._setStatus('offline'); return; }
-    this._setStatus('saving');
-    const remote = await this.drive.load();
-
-    if (remote) {
-      let taskArray, log;
-      if (Array.isArray(remote)) {
-        taskArray = remote; log = [];
-      } else if (remote && typeof remote === 'object') {
-        taskArray = remote.tasks || []; 
-        log = remote.completionLog || [];
-        this.calendarSyncEnabled = remote.calendarSyncEnabled !== false;
-        // only overwrite the local whiteboard if Drive actually has one
-        if (Array.isArray(remote.whiteboard)) this.whiteboard = remote.whiteboard;
-      } else {
-        this._setStatus('synced'); return;
-      }
-      this.tasks = taskArray.map((t) => new Task(t));
-      this.completionLog = log;
-
-      let colorIndex = 0;
-      this.used_colors = [];
-      for (const t of this.tasks) {
-        t.color = PALETTE[colorIndex % PALETTE.length];
-        this.used_colors.push(t.color);
-        colorIndex++;
-      }
-      this._saveLocal();
-      this._resetHistory();   // fresh data from Drive → start a fresh undo history
-      this._notify();
-      this._setStatus('synced');
-    } else {
-      if (this.tasks.length > 0) await this._saveRemote();
-      else this._setStatus('synced');
-    }
-  }
-
-  // ---------- persistence ----------
-  _loadLocal() {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (!raw) { this.completionLog = []; return []; }
-    if (Array.isArray(raw)) { this.completionLog = []; return raw.map((t) => new Task(t)); }
-    this.completionLog = raw.completionLog || [];
-    this.calendarSyncEnabled = raw.calendarSyncEnabled !== false;
-    this.whiteboard = Array.isArray(raw.whiteboard) ? raw.whiteboard : [];
-    return (raw.tasks || []).map((t) => new Task(t));
-  }
-
-  _saveLocal() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      tasks: this.tasks.map((t) => t.toJSON()),
-      completionLog: this.completionLog,
-      calendarSyncEnabled: this.calendarSyncEnabled,
-      whiteboard: this.whiteboard,
-    }));
-  }
-
-  // ---------- whiteboard (quick-capture list) ----------
-  getWhiteboard() { return this.whiteboard; }
-  setWhiteboard(lines) { this.whiteboard = lines; this._save(); }
-  saveWhiteboard(opts) { this._save(opts); }
-
-  async _saveRemote() {
-  // If a save is already running, mark that another is needed and bail.
-  // The in-flight save will re-run itself when it finishes.
-  if (this._saving) {
-    this._pendingSave = true;
-    return;
-  }
-
-  this._saving = true;
-  try {
-    if (!this.drive || !this.drive.isReady) {
-      this._setStatus('offline');
-      return;
-    }
-
-    this._setStatus('saving');
-
-    const ok = await this.drive.save({
-      tasks: this.tasks.map((t) => t.toJSON()),
-      completionLog: this.completionLog,
-      calendarSyncEnabled: this.calendarSyncEnabled,
-      whiteboard: this.whiteboard,
-    });
-
-    if (ok) {
-      this._setStatus('synced');
-      this._retryCount = 0;
-      if (this._retryTimer) {
-        clearTimeout(this._retryTimer);
-        this._retryTimer = null;
-      }
-    } else {
-      this._setStatus('failed');
-      this._scheduleRetry();
-    }
-  } finally {
-    this._saving = false;
-
-    // If more changes arrived while we were saving, save again immediately
-    // so the newest state is persisted.
-    if (this._pendingSave) {
-      this._pendingSave = false;
-      this._saveRemote();
-    }
-  }
-}
-
-_scheduleRetry() {
-  if (this._retryTimer) return; // one pending retry at a time
-  this._retryCount = (this._retryCount || 0) + 1;
-
-  // backoff: 2s, 4s, 8s, 16s … capped at 30s
-  const delay = Math.min(2000 * 2 ** (this._retryCount - 1), 30000);
-
-  this._retryTimer = setTimeout(() => {
-    this._retryTimer = null;
-    this._saveRemote();
-  }, delay);
-}
-
-  addBlockToSubtask(taskId, subIndex, block) {
-    const t = this.find(taskId);
-    if (!t) return;
-    const st = t.subtasks[subIndex];
-    if (!st) return;
-    st.blocks.push(block);
-    this._save();
-  }
-
-  _setStatus(status) {
-    this._status = status;
-    this.syncStatusFn(status);
-  }
-
-  // Save locally immediately, debounce the Drive save.
-  // opts: { history: false } to skip undo; { coalesce: key } to merge with the previous step
-  _save(opts) {
-    this._recordHistory(opts);
-    this._persist();
-  }
-
-  _persist() {
-    this._saveLocal();
-        this._notify();
-
-        // immediately show we have unsaved changes
-        if (this.drive && this.drive.isReady) {
-        this._setStatus('saving');
-        }
-
-        if (this._saveTimer) clearTimeout(this._saveTimer);
-        this._saveTimer = setTimeout(() => this._saveRemote(), 800);
-    }
-
-  // ---------- subscriptions ----------
-  subscribe(fn) { this.listeners.push(fn); }
-  _notify() { this.listeners.forEach((fn) => fn()); }
 
   // ---------- queries ----------
   getAll() { return this.tasks; }
   find(id) { return this.tasks.find((t) => t.id === id); }
+  getCompletionLog() { return this.completionLog; }
+  getWhiteboard() { return this.whiteboard; }
 
+  // Done tasks last, then by soonest due date (stable sort keeps the first ordering on ties).
   getSorted() {
-    const isTaskDone = (t) =>
-      t.subtasks.length > 0 && t.subtasks.every((s) => s.done);
-    const soonestDueDate = (t) => {
-      return _getSoonestDueDate(t);
-    };
+    const isTaskDone = (t) => t.subtasks.length > 0 && t.subtasks.every((s) => s.done);
 
-    const sorted = [...this.tasks].sort(
-      (a, b) => (isTaskDone(a) ? 1 : 0) - (isTaskDone(b) ? 1 : 0)
-    );
+    const sorted = [...this.tasks].sort((a, b) => isTaskDone(a) - isTaskDone(b));
     return sorted.sort((a, b) => {
-      const aDue = soonestDueDate(a);
-      const bDue = soonestDueDate(b);
+      const aDue = _getSoonestDueDate(a);
+      const bDue = _getSoonestDueDate(b);
       if (aDue && bDue) return aDue - bDue;
       if (aDue) return -1;
       if (bDue) return 1;
@@ -440,181 +63,48 @@ _scheduleRetry() {
     });
   }
 
-  // Count blocks that have NO calendar event (need pushing)
-  countBlocksWithoutEvents() {
-    let count = 0;
-    this.tasks.forEach((t) =>
-      t.subtasks.forEach((st) => {
-        if (st.done) return; // skip completed subtasks
-        st.blocks.forEach((b) => { if (!b.eventId) count++; });
-      })
-    );
-    return count;
+  countBlocksWithoutEvents() { return this.calendar.countBlocksWithoutEvents(); }
+  countBlocksWithEvents() { return this.calendar.countBlocksWithEvents(); }
+
+  _findSubtask(taskId, subIndex) {
+    return this.find(taskId)?.subtasks[subIndex];
   }
 
-  // Push all blocks lacking an eventId to Google Calendar (create events).
-  // Used when turning sync on.
-  async pushUnsyncedBlocks(googleCalendar, onProgress = null) {
-    if (!googleCalendar || !googleCalendar.isAuthed) return 0;
-
-    const prevSync = googleCalendar.syncEnabled;
-    googleCalendar.syncEnabled = true; // ensure writes go through
-
-    const total = this.countBlocksWithoutEvents();
-    let pushed = 0;
-
-    for (const task of this.tasks) {
-      for (const st of task.subtasks) {
-        if (st.done) continue; // don't recreate events for completed subtasks
-        for (const b of st.blocks) {
-          if (b.eventId) continue; // already synced
-          try {
-            const eventId = await googleCalendar.createEvent({
-              summary: `${task.name}: ${st.name}`,
-              description: st.note || '',
-              startDate: b.date,
-              startTime: b.start,
-              hours: b.hours,
-            });
-            b.eventId = eventId;
-            pushed++;
-            if (onProgress) onProgress(pushed, total);
-          } catch (e) {
-            console.warn('Failed to push block:', e);
-          }
-        }
-      }
-    }
-
-    googleCalendar.syncEnabled = prevSync; // restore
-    this._save({ history: false });
-    return pushed;
+  // ---------- task mutations ----------
+  add(task) {
+    this.tasks.push(task);
+    this.save();
   }
-
-  // ---------- mutations ----------
-  add(task) { this.tasks.push(task); this._save(); }
 
   async update(id, { name, subtasks }, googleCalendar) {
     const t = this.find(id);
     if (!t) return;
 
-    const oldTaskName = t.name;
-    const taskNameChanged = oldTaskName !== name;
-
+    const taskNameChanged = t.name !== name;
     const renamedSubtasks = [];
 
     subtasks.forEach((ns) => {
       const old = t.subtasks.find((o) => o.id === ns.id);
-      if (old) {
-        if (old.blocks.length) ns.blocks = old.blocks;
-        ns.done = old.done;
-        ns.actualHours = old.actualHours;
-        ns.note = old.note;          
-        ns.waiting = old.waiting;    
-
-        if (old.name !== ns.name) {
-          renamedSubtasks.push({ subtask: ns, oldName: old.name, newName: ns.name });
-        }
+      if (!old) return;
+      if (old.blocks.length) ns.blocks = old.blocks;
+      ns.done = old.done;
+      ns.actualHours = old.actualHours;
+      ns.note = old.note;
+      ns.waiting = old.waiting;
+      if (old.name !== ns.name) {
+        renamedSubtasks.push({ subtask: ns, oldName: old.name, newName: ns.name });
       }
     });
 
     t.name = name;
     t.subtasks = subtasks;
-    this._save();
+    this.save();
 
     if (googleCalendar && googleCalendar.isAuthed) {
-      await this._updateEventTitles(t, taskNameChanged, renamedSubtasks, googleCalendar);
+      await this.calendar.updateEventTitles(t, taskNameChanged, renamedSubtasks, googleCalendar);
     }
   }
 
-  // Update event titles when task/subtask names change
-  async _updateEventTitles(task, taskNameChanged, renamedSubtasks, googleCalendar) {
-    // If the TASK name changed, ALL subtasks' events need new titles
-    // If only some subtasks were renamed, just those need updating
-    const subtasksToUpdate = new Set();
-
-    if (taskNameChanged) {
-      // every subtask with events needs its title refreshed
-      task.subtasks.forEach((st) => subtasksToUpdate.add(st));
-    }
-    renamedSubtasks.forEach(({ subtask }) => subtasksToUpdate.add(subtask));
-
-    for (const st of subtasksToUpdate) {
-      for (const b of st.blocks) {
-        if (!b.eventId) continue;
-        try {
-          await googleCalendar.updateEvent({
-            eventId: b.eventId,
-            summary: `${task.name}: ${st.name}`,
-            startDate: b.date,
-            startTime: b.start,
-            hours: b.hours,
-          });
-        } catch (e) {
-          console.warn('Failed to update event title:', e);
-        }
-      }
-    }
-  }
-
-  setSubtaskBlocks(taskId, subIndex, blocks) {
-    const t = this.find(taskId);
-    if (!t) return;
-    t.subtasks[subIndex].blocks = blocks;
-    this._save();
-  }
-
-  uncompleteSubtask(taskId, subIndex) {
-    const t = this.find(taskId);
-    if (!t) return;
-    const st = t.subtasks[subIndex];
-    st.done = false;
-    st.actualHours = null;
-    st.blocks = st.blocks.filter((b) => b.eventId !== null);
-    this._save();
-  }
-
-  async deleteSubtaskEvents(st, scope, googleCalendar) {
-    if (scope === 'none') return;
-    if (!googleCalendar || !googleCalendar.isAuthed) return;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    for (const b of st.blocks) {
-      if (!b.eventId) continue;
-      if (scope === 'future') {
-        const blockDate = new Date(b.date + 'T00:00:00');
-        if (blockDate < today) continue;
-      }
-      try {
-        await googleCalendar.deleteEvent(b.eventId);
-        b.eventId = null;
-      } catch (e) {
-        // 404/410 = already gone on Google's side → safe to clear locally
-        console.warn('Failed to delete event, clearing locally:', b.eventId, e);
-        b.eventId = null; // or leave it — your call
-      }
-    }
-  }
-
-  async completeSubtask(taskId, subIndex, actualHours, scope, googleCalendar) {
-    const t = this.find(taskId);
-    if (!t) return;
-    const st = t.subtasks[subIndex];
-    await this.deleteSubtaskEvents(st, scope, googleCalendar);
-    st.done = true;
-    st.actualHours = actualHours;
-    this._save();
-  }
-
-  toggleWaiting(taskId, subIndex) {
-    const t = this.find(taskId);
-    if (!t) return;
-    const st = t.subtasks[subIndex];
-    if (!st) return;
-    st.waiting = !st.waiting;
-    this._save();
-  }
-  
   async removeTask(id, scope, googleCalendar) {
     const t = this.find(id);
     if (!t) return;
@@ -624,10 +114,85 @@ _scheduleRetry() {
       }
     }
     this.tasks = this.tasks.filter((x) => x.id !== id);
-    this._save();
+    this.save();
   }
 
-    // Log a completed subtask (one entry per subtask; updates if re-completed)
+  // 'always' tasks stay on the list even when every subtask is done
+  setPersistent(taskId, persistent) {
+    const t = this.find(taskId);
+    if (!t) return;
+    t.persistent = persistent;
+    this.save();
+  }
+
+  // Add subtasks after the existing ones; returns the index of the first new one.
+  appendSubtasks(taskId, subtasks) {
+    const t = this.find(taskId);
+    if (!t) return -1;
+    const startIndex = t.subtasks.length;
+    t.subtasks.push(...subtasks);
+    this.save();
+    return startIndex;
+  }
+
+  setTaskNote(taskId, note) {
+    const t = this.find(taskId);
+    if (!t) return;
+    t.note = note;
+    this.save();
+  }
+
+  // ---------- subtask mutations ----------
+  setSubtaskBlocks(taskId, subIndex, blocks) {
+    const t = this.find(taskId);
+    if (!t) return;
+    t.subtasks[subIndex].blocks = blocks;
+    this.save();
+  }
+
+  addBlockToSubtask(taskId, subIndex, block) {
+    const st = this._findSubtask(taskId, subIndex);
+    if (!st) return;
+    st.blocks.push(block);
+    this.save();
+  }
+
+  async completeSubtask(taskId, subIndex, actualHours, scope, googleCalendar) {
+    const t = this.find(taskId);
+    if (!t) return;
+    const st = t.subtasks[subIndex];
+    await this.deleteSubtaskEvents(st, scope, googleCalendar);
+    st.done = true;
+    st.actualHours = actualHours;
+    this.save();
+  }
+
+  uncompleteSubtask(taskId, subIndex) {
+    const t = this.find(taskId);
+    if (!t) return;
+    const st = t.subtasks[subIndex];
+    st.done = false;
+    st.actualHours = null;
+    st.blocks = st.blocks.filter((b) => b.eventId !== null);
+    this.save();
+  }
+
+  toggleWaiting(taskId, subIndex) {
+    const st = this._findSubtask(taskId, subIndex);
+    if (!st) return;
+    st.waiting = !st.waiting;
+    this.save();
+  }
+
+  setSubtaskNote(taskId, subIndex, note) {
+    const st = this._findSubtask(taskId, subIndex);
+    if (!st) return;
+    st.note = note;
+    this.save();
+  }
+
+  // ---------- completion log ----------
+  // One entry per subtask; re-completing replaces the earlier entry.
   logCompletion({ taskName, subtaskName, subtaskId, hoursSpent, taskId, taskJustCompleted }) {
     const entry = {
       subtaskId,
@@ -639,20 +204,11 @@ _scheduleRetry() {
       completedAt: new Date().toISOString(),
     };
 
-    const existingIdx = this.completionLog.findIndex(
-      (e) => e.subtaskId === subtaskId
-    );
-    if (existingIdx >= 0) {
-      this.completionLog[existingIdx] = entry;
-    } else {
-      this.completionLog.push(entry);
-    }
+    const existingIdx = this.completionLog.findIndex((e) => e.subtaskId === subtaskId);
+    if (existingIdx >= 0) this.completionLog[existingIdx] = entry;
+    else this.completionLog.push(entry);
 
-    this._save();
-  }
-
-  getCompletionLog() {
-    return this.completionLog;
+    this.save();
   }
 
   // Move a completed item to the day you actually did it (keeps its time of day).
@@ -664,64 +220,101 @@ _scheduleRetry() {
     const [y, m, d] = ymd.split('-').map(Number);
     const moved = new Date(y, m - 1, d, old.getHours(), old.getMinutes(), old.getSeconds());
     e.completedAt = moved.toISOString();
-    this._save();
+    this.save();
   }
 
-  setTaskNote(taskId, note) {
-    const t = this.find(taskId);
-    if (!t) return;
-    t.note = note;
-    this._save();
+  // ---------- whiteboard (quick-capture list) ----------
+  setWhiteboard(lines) {
+    this.whiteboard = lines;
+    this.save();
   }
 
-  setSubtaskNote(taskId, subIndex, note) {
-    const t = this.find(taskId);
-    if (!t) return;
-    const st = t.subtasks[subIndex];
-    if (!st) return;
-    st.note = note;
-    this._save();
+  saveWhiteboard(opts) { this.save(opts); }
+
+  // ---------- Google Calendar (see CalendarSync) ----------
+  deleteSubtaskEvents(st, scope, googleCalendar) {
+    return this.calendar.deleteSubtaskEvents(st, scope, googleCalendar);
   }
 
-  async deleteAllCalendarEvents(googleCalendar, onProgress = null) {
-    if (!googleCalendar || !googleCalendar.isAuthed) return 0;
-
-    const prevSync = googleCalendar.syncEnabled;
-    googleCalendar.syncEnabled = true;
-
-    // count total first (for progress)
-    const total = this.countBlocksWithEvents();
-    let deleted = 0;
-
-    for (const task of this.tasks) {
-      for (const st of task.subtasks) {
-        for (const b of st.blocks) {
-          if (!b.eventId) continue;
-          try {
-            await googleCalendar.deleteEvent(b.eventId);
-            deleted++;
-            if (onProgress) onProgress(deleted, total); // ← report progress
-          } catch (e) {
-            console.warn('Failed to delete event:', e);
-          }
-          b.eventId = null;
-        }
-      }
-    }
-
-    googleCalendar.syncEnabled = prevSync;
-    this._save({ history: false });
-    return deleted;
+  pushUnsyncedBlocks(googleCalendar, onProgress = null) {
+    return this.calendar.pushUnsyncedBlocks(googleCalendar, onProgress);
   }
 
-  // Count how many blocks currently have calendar events
-  countBlocksWithEvents() {
-    let count = 0;
-    this.tasks.forEach((t) =>
-      t.subtasks.forEach((st) =>
-        st.blocks.forEach((b) => { if (b.eventId) count++; })
-      )
-    );
-    return count;
+  deleteAllCalendarEvents(googleCalendar, onProgress = null) {
+    return this.calendar.deleteAllCalendarEvents(googleCalendar, onProgress);
+  }
+
+  reconcileWithCalendar(googleCalendar) {
+    return this.calendar.reconcile(googleCalendar);
+  }
+
+  // ---------- undo / redo (see UndoHistory) ----------
+  canUndo() { return this.history.canUndo(); }
+  canRedo() { return this.history.canRedo(); }
+
+  undo() { return this._restore(this.history.stepBack()); }
+  redo() { return this._restore(this.history.stepForward()); }
+
+  // undo snapshot shape: tasks + completion log + whiteboard
+  _serialize() {
+    return JSON.stringify({
+      tasks: this.tasks.map((t) => t.toJSON()),
+      completionLog: this.completionLog,
+      whiteboard: this.whiteboard,
+    });
+  }
+
+  // Put a snapshot back without recording it as a new undo step. False if there was none.
+  _restore(json) {
+    if (json === null) return false;
+    const d = JSON.parse(json);
+    this.tasks = (d.tasks || []).map((t) => new Task(t));
+    this.completionLog = d.completionLog || [];
+    this.whiteboard = d.whiteboard || [];
+    this.history.markRestored(json);
+    this._persist();
+    this.history.emit();
+    return true;
+  }
+
+  // ---------- persistence (see LocalSaver, DriveSync) ----------
+  // Every change ends here: undo step → localStorage → notify views → debounced Drive save.
+  // opts: { history: false } to skip undo; { coalesce: key } to merge with the previous step
+  save(opts) {
+    this.history.record(opts);
+    this._persist();
+  }
+
+  _persist() {
+    this._saveLocal();
+    this._notify();
+    this.sync.scheduleSave();
+  }
+
+  _saveLocal() { LocalSaver.save(this); }
+
+  // Drive save state: 'synced' | 'saving' | 'failed' | 'offline'
+  get syncStatus() { return this.sync.status; }
+  // save to Drive right away (after a failure or coming back online)
+  retrySave() { return this.sync.saveNow(); }
+
+  attachDrive(drive) { this.sync.attach(drive); }
+
+  // Called after Google connects: last-write-wins, so Drive wins on load.
+  loadFromDrive() { return this.sync.load(); }
+
+  _applyDriveData({ tasks, completionLog, calendarSyncEnabled, whiteboard }) {
+    if (calendarSyncEnabled !== undefined) this.calendarSyncEnabled = calendarSyncEnabled;
+    if (whiteboard) this.whiteboard = whiteboard;
+    this.tasks = tasks.map((t) => new Task(t));
+    this.completionLog = completionLog;
+    this._assignPaletteColors();
+    this._saveLocal();
+    this.history.reset(); // fresh data from Drive → fresh undo history
+    this._notify();
+  }
+
+  _assignPaletteColors() {
+    this.tasks.forEach((t, i) => { t.color = PALETTE[i % PALETTE.length]; });
   }
 }

@@ -1,126 +1,171 @@
-import { startOfDay, sameDay, _isDueToday } from '../utils.js';
+import { startOfDay, ymdLocal, hhmm, parseLocalDate, parseLocalDateTime, fmtShortDate } from '../core/dates.js';
+import { escapeHtml, _isDueToday } from '../utils.js';
 import { TimeBlock } from '../models/Subtask.js';
+import { View } from '../core/View.js';
 
-export class PlannerView {
+const MOBILE_BREAKPOINT_PX = 768;
+const MS_PER_HOUR = 3600000;
+const DUE_TODAY_BORDER = '#ff3b30';
+const GOOGLE_EVENT_COLORS = {
+  backgroundColor: '#c7c7cc',
+  borderColor: '#8e8e93',
+  textColor: '#3a3a3c',
+};
+
+export class PlannerView extends View {
   constructor(store, googleCalendar, settings) {
+    super();
     this.store = store;
     this.gcal = googleCalendar;
     this.settings = settings;
-    this.isMobile = window.innerWidth < 768;
-    this.isActive = false;
+    this.isMobile = isMobileWidth();
     this.calendar = null;
     this.selectedSubtask = null; // { taskId, subIndex }
-    this.selectedBlockEl = null; // currently clicked block DOM (for delete ✕)
     this.hideScheduled = false;
-    this._navBlockIndex = -1;
-    const hideCb = document.getElementById('hideScheduled');
-    if (hideCb) {
-      hideCb.addEventListener('change', () => {
-        this.hideScheduled = hideCb.checked;
-        this._renderBacklog();
-      });
-    }
+    this._clickedBlock = null;   // { info, p } of the block showing the delete ✕
 
     this.container = document.getElementById('plannerViewContainer');
     this.calendarEl = document.getElementById('plannerCalendar');
     this.backlogEl = document.getElementById('backlogCards');
 
-    // keyboard delete
+    this._bindGlobalEvents();
+  }
+
+  // ---------- lifecycle (deactivate from View) ----------
+  // build FullCalendar on first show (or resize it after being hidden), then draw
+  activate() {
+    if (!this.calendar) {
+      this._initCalendar();
+    } else {
+      this.calendar.updateSize();
+      this.calendar.refetchEvents();
+    }
+    this._bindMobileMenu();
+    this._updateMobileViewButtons();
+    super.activate();
+  }
+
+  refresh() {
+    if (!this.isActive || !this.calendar) return;
+    // defer so the store mutation completes before refetching
+    setTimeout(() => this.calendar.refetchEvents(), 0);
+    this.render();
+  }
+
+  async render() {
+    if (!this.isActive || !this.calendar) return;
+    this._renderBacklog();
+    this._updateCounter();
+  }
+
+  // ---------- event binding ----------
+  _bindGlobalEvents() {
+    const hideCheckbox = document.getElementById('hideScheduled');
+    hideCheckbox?.addEventListener('change', () => {
+      this.hideScheduled = hideCheckbox.checked;
+      this._renderBacklog();
+    });
+
     document.addEventListener('keydown', (e) => {
       if ((e.key === 'Delete' || e.key === 'Backspace') && this._clickedBlock) {
         this._deleteClickedBlock();
       }
     });
 
-    window.addEventListener('resize', () => {
-      const nowMobile = window.innerWidth < 768;
-      if (nowMobile !== this.isMobile) {
-        this.isMobile = nowMobile;
-        // rebuild the calendar with the right config
-        if (this.calendar) { this.calendar.destroy(); this.calendar = null; }
-        if (this.isActive) { this._initCalendar(); this.render(); }
-        this._applyMobilePlannerUI();   // (added in Piece 2)
-      }
-    });
+    window.addEventListener('resize', () => this._onResize());
   }
 
-  activate() {
-  this.isActive = true;
-  if (!this.calendar) this._initCalendar();
-  else { this.calendar.updateSize(); this.calendar.refetchEvents(); }
-  this._bindMobileMenu();        
-  this._applyMobilePlannerUI(); 
-  this.render();
-}
+  _onResize() {
+    const nowMobile = isMobileWidth();
+    if (nowMobile === this.isMobile) return;
 
-  deactivate() { this.isActive = false; }
+    // rebuild the calendar so it picks up the mobile/desktop config
+    this.isMobile = nowMobile;
+    if (this.calendar) {
+      this.calendar.destroy();
+      this.calendar = null;
+    }
+    if (this.isActive) {
+      this._initCalendar();
+      this.render();
+    }
+    this._updateMobileViewButtons();
+  }
 
-  refresh() {
-    if (this.isActive && this.calendar) {
-      // small delay ensures store mutation is complete before refetch
-      setTimeout(() => {
-        this.calendar.refetchEvents();
-      }, 0);
-      this._renderBacklog();
-      this._updateCounter();
+  _bindMobileMenu() {
+    if (this._mobileMenuBound) return;
+    this._mobileMenuBound = true;
+
+    const btn = document.getElementById('plannerMenuBtn');
+    const panel = document.getElementById('plannerMenuPanel');
+    if (!btn || !panel) return;
+
+    // give FC a tick after a touch, then clear any stuck selection state
+    this.calendarEl.addEventListener('touchend', () => {
+      setTimeout(() => this.calendar?.unselect(), 0);
+    }, { passive: true });
+
+    const hidePanel = () => { panel.style.display = 'none'; };
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this._clickedBlock && !e.target.closest('.fc-event')) this._clearClickedBlock();
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+      this._updateMobileViewButtons();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (panel.style.display !== 'none' && !panel.contains(e.target) && e.target !== btn) {
+        hidePanel();
+      }
+    });
+
+    document.getElementById('plannerPrevDay')?.addEventListener('click', () => this.calendar.prev());
+    document.getElementById('plannerTodayBtn')?.addEventListener('click', () => this.calendar.today());
+    document.getElementById('plannerNextDay')?.addEventListener('click', () => this.calendar.next());
+
+    panel.querySelectorAll('.pm-views button').forEach((viewBtn) => {
+      viewBtn.addEventListener('click', () => {
+        this.calendar.changeView(viewBtn.dataset.view);
+        this._updateMobileViewButtons();
+      });
+    });
+
+    // reuse the desktop refresh button so both trigger CalendarRefresh.reconcile()
+    document.getElementById('pmRefresh').addEventListener('click', () => {
+      document.getElementById('plannerRefreshBtn')?.click();
+      hidePanel();
+    });
+
+    const mobileHide = document.getElementById('hideScheduledMobile');
+    if (mobileHide) {
+      mobileHide.checked = this.hideScheduled;
+      mobileHide.addEventListener('change', () => {
+        this.hideScheduled = mobileHide.checked;
+        const desktopHide = document.getElementById('hideScheduled');
+        if (desktopHide) desktopHide.checked = this.hideScheduled;
+        this._renderBacklog();
+      });
     }
   }
 
-  // Check if a given date matches the selected subtask's due date
-  _isDueDate(date) {
-    if (!this.selectedSubtask) return false;
-    const task = this.store.find(this.selectedSubtask.taskId);
-    const st = task?.subtasks[this.selectedSubtask.subIndex];
-    if (!st || !st.due) return false;
-
-    // compare year/month/day (local)
-    const due = new Date(st.due + 'T00:00:00');
-    return date.getFullYear() === due.getFullYear() &&
-           date.getMonth() === due.getMonth() &&
-           date.getDate() === due.getDate();
+  _updateMobileViewButtons() {
+    const panel = document.getElementById('plannerMenuPanel');
+    if (!panel) return;
+    const currentView = this.calendar?.view?.type;
+    panel.querySelectorAll('.pm-views button').forEach((viewBtn) => {
+      viewBtn.classList.toggle('active', viewBtn.dataset.view === currentView);
+    });
   }
 
-  _getSortedBlocks(st) {
-    return st.blocks
-      .filter((b) => b.date && b.start)
-      .map((b) => ({
-        block: b,
-        time: this._blockStart(b).getTime(),
-      }))
-      .sort((a, b) => a.time - b.time);
-  }
-
-  _highlightDueColumn() {
-    // clear any existing highlight
-    this.calendarEl.querySelectorAll('.due-date-column, .due-date-header')
-      .forEach((el) => el.classList.remove('due-date-column', 'due-date-header'));
-
-    if (!this.selectedSubtask) return;
-    const task = this.store.find(this.selectedSubtask.taskId);
-    const st = task?.subtasks[this.selectedSubtask.subIndex];
-    if (!st || !st.due) return;
-
-    // FullCalendar tags day cells with data-date="YYYY-MM-DD"
-    const dueStr = st.due; // already YYYY-MM-DD
-
-    // highlight the day column cells
-    this.calendarEl
-      .querySelectorAll(`.fc-timegrid-col[data-date="${dueStr}"], .fc-day[data-date="${dueStr}"]`)
-      .forEach((el) => el.classList.add('due-date-column'));
-
-    // highlight the header
-    this.calendarEl
-      .querySelectorAll(`.fc-col-header-cell[data-date="${dueStr}"]`)
-      .forEach((el) => el.classList.add('due-date-header'));
-  }
-
+  // ---------- calendar ----------
   _initCalendar() {
     const mobile = this.isMobile;
 
     this.calendar = new FullCalendar.Calendar(this.calendarEl, {
       initialView: mobile ? 'timeGridThreeDay' : 'timeGridWeek',
 
-      // mobile: hide FC's own toolbar (we use our hamburger + Add Task instead)
+      // mobile hides FC's toolbar in favour of the hamburger menu
       headerToolbar: mobile
         ? false
         : {
@@ -135,7 +180,6 @@ export class PlannerView {
 
       views: {
         timeGridWeek: { duration: { days: 7 }, dateIncrement: { days: 1 }, buttonText: 'Week' },
-        // custom 3-day view for mobile, scrolls one day at a time
         timeGridThreeDay: {
           type: 'timeGrid',
           duration: { days: 3 },
@@ -155,7 +199,6 @@ export class PlannerView {
       firstDay: 1,
       snapDuration: '00:15:00',
 
-      // touch: long-press to start creating/dragging on mobile
       longPressDelay: 300,
       selectLongPressDelay: 300,
       eventLongPressDelay: 300,
@@ -173,14 +216,7 @@ export class PlannerView {
         this._loadEvents(info.start, info.end).then(success).catch(failure);
       },
 
-      eventClassNames: (arg) => {
-        const p = arg.event.extendedProps;
-        if (p.kind !== 'block') return [];
-        if (!this.selectedSubtask) return [];
-        if (this._isSelected(p.taskId, p.subIndex)) return ['block-emphasized'];
-        if (p.taskId === this.selectedSubtask.taskId) return ['block-sibling'];
-        return ['block-dimmed'];
-      },
+      eventClassNames: (arg) => this._blockClassNames(arg.event.extendedProps),
       dayCellClassNames: (arg) => (this._isDueDate(arg.date) ? ['due-date-column'] : []),
       dayHeaderClassNames: (arg) => (this._isDueDate(arg.date) ? ['due-date-header'] : []),
       datesSet: () => {
@@ -188,7 +224,7 @@ export class PlannerView {
         this._renderBacklog();
       },
       dateClick: () => {
-        this._clearClickedBlock(); 
+        this._clearClickedBlock();
         this.calendar.unselect();
       },
       select: (info) => this._onSelectRange(info),
@@ -203,81 +239,71 @@ export class PlannerView {
     this.calendar.render();
   }
 
-  _getCalendarCenterTime() {
-    const view = this.calendar.view;
-    const start = view.currentStart.getTime();
-    const end = view.currentEnd.getTime();
-    return (start + end) / 2; // midpoint of the visible range
-  }
-
-  _getBlockDays(st) {
-    const daySet = new Set();
-    st.blocks.forEach((b) => {
-      if (!b.date) return;
-      const d = new Date(b.date + 'T00:00:00');
-      daySet.add(startOfDay(d).getTime());
-    });
-    return [...daySet].sort((a, b) => a - b);
-  }
-
-  _getCenteredDay() {
-    const view = this.calendar.view;
-    const mid = (view.currentStart.getTime() + view.currentEnd.getTime()) / 2;
-    return startOfDay(new Date(mid)).getTime();
+  _blockClassNames(props) {
+    if (props.kind !== 'block' || !this.selectedSubtask) return [];
+    if (this._isSelected(props.taskId, props.subIndex)) return ['block-emphasized'];
+    if (props.taskId === this.selectedSubtask.taskId) return ['block-sibling'];
+    return ['block-dimmed'];
   }
 
   // ---------- event loading ----------
   async _loadEvents(rangeStart, rangeEnd) {
-    const events = [];
+    const blockEventIds = this._collectBlockEventIds();
+    const googleEvents = await this._loadGoogleEvents(rangeStart, rangeEnd, blockEventIds);
+    return [...googleEvents, ...this._buildBlockEvents(rangeStart, rangeEnd)];
+  }
 
-    const blockEventIds = new Set();
-    this.store.getAll().forEach((t) =>
-      t.subtasks.forEach((s) =>
-        s.blocks.forEach((b) => { if (b.eventId) blockEventIds.add(b.eventId); })
+  _collectBlockEventIds() {
+    const ids = new Set();
+    this.store.getAll().forEach((task) =>
+      task.subtasks.forEach((st) =>
+        st.blocks.forEach((b) => { if (b.eventId) ids.add(b.eventId); })
       )
     );
+    return ids;
+  }
 
-    // Google events... (keep as-is)
-    if (this.gcal && this.gcal.isAuthed) {
-      try {
-        const calIds = this.settings.getSelectedCalendars();
-        const busy = await this.gcal.getEvents(rangeStart, rangeEnd, calIds);
-        busy.forEach((ev) => {
-          if (blockEventIds.has(ev.id)) return;
-          events.push({
-            id: 'gcal-' + ev.id, title: ev.title, start: ev.start, end: ev.end,
-            backgroundColor: '#c7c7cc', borderColor: '#8e8e93', textColor: '#3a3a3c',
-            editable: false, extendedProps: { kind: 'google' },
-          });
-        });
-      } catch (e) { console.warn('planner google load failed', e); }
+  // Google events that mirror app blocks are skipped; the block is shown instead.
+  async _loadGoogleEvents(rangeStart, rangeEnd, blockEventIds) {
+    if (!this.gcal || !this.gcal.isAuthed) return [];
+    try {
+      const calIds = this.settings.getSelectedCalendars();
+      const busy = await this.gcal.getEvents(rangeStart, rangeEnd, calIds);
+      return busy
+        .filter((ev) => !blockEventIds.has(ev.id))
+        .map((ev) => ({
+          id: 'gcal-' + ev.id, title: ev.title, start: ev.start, end: ev.end,
+          ...GOOGLE_EVENT_COLORS,
+          editable: false, extendedProps: { kind: 'google' },
+        }));
+    } catch (e) {
+      console.warn('planner google load failed', e);
+      return [];
     }
+  }
 
-    // task blocks
-    let blockCount = 0, includedCount = 0;
+  _buildBlockEvents(rangeStart, rangeEnd) {
+    const events = [];
     this.store.getAll().forEach((task) => {
       task.subtasks.forEach((st, subIndex) => {
         st.blocks.forEach((b, blockIndex) => {
           if (!b.date || !b.start) return;
-
-          // Skip done-subtask blocks whose Google event was deleted (no eventId)
-          // These are leftover from completing a task with "delete events"
+          // done subtasks whose Google events were deleted on completion leave orphan blocks
           if (st.done && !b.eventId) return;
 
-          const start = this._blockStart(b);
-          const end = new Date(start.getTime() + b.hoursNum * 3600000);
+          const start = parseLocalDateTime(b.date, b.start);
+          const end = new Date(start.getTime() + b.hoursNum * MS_PER_HOUR);
           if (end < rangeStart || start > rangeEnd) return;
 
-          const selected = this._isSelected(task.id, subIndex);
-          const dueToday = !st.done && st.due && _isDueToday(st);
+          const dueToday = _isDueToday(st);
           events.push({
             id: b.eventId || `block-${task.id}-${subIndex}-${blockIndex}`,
             title: st.name,
             start, end,
             backgroundColor: task.color,
-            borderColor: dueToday ? '#ff3b30' : task.color, // red border if due today
+            borderColor: dueToday ? DUE_TODAY_BORDER : task.color,
             textColor: '#fff',
-            editable: selected && !st.done,
+            editable: this._isSelected(task.id, subIndex) && !st.done,
             classNames: dueToday ? ['block-due-today'] : [],
             extendedProps: {
               kind: 'block', taskId: task.id, taskName: task.name,
@@ -287,7 +313,6 @@ export class PlannerView {
         });
       });
     });
-
     return events;
   }
 
@@ -298,21 +323,24 @@ export class PlannerView {
       this.selectedSubtask.subIndex === subIndex;
   }
 
+  _getSelectedSubtask() {
+    if (!this.selectedSubtask) return null;
+    const task = this.store.find(this.selectedSubtask.taskId);
+    return task?.subtasks[this.selectedSubtask.subIndex];
+  }
+
+  // Toggles: selecting the already-selected subtask deselects it.
   _selectSubtask(taskId, subIndex) {
-    if (this._isSelected(taskId, subIndex)) {
-      this.selectedSubtask = null;
-    } else {
-      this.selectedSubtask = { taskId, subIndex };
-    }
-    this._clearClickedBlock();
-    this._renderBacklog();
-    this.calendar.refetchEvents();
-    this._highlightDueColumn();
-    this._updateCounter();
+    const selection = this._isSelected(taskId, subIndex) ? null : { taskId, subIndex };
+    this._applySelection(selection);
   }
 
   _switchSelection(taskId, subIndex) {
-    this.selectedSubtask = { taskId, subIndex };
+    this._applySelection({ taskId, subIndex });
+  }
+
+  _applySelection(selection) {
+    this.selectedSubtask = selection;
     this._clearClickedBlock();
     this._renderBacklog();
     this.calendar.refetchEvents();
@@ -320,14 +348,15 @@ export class PlannerView {
     this._updateCounter();
   }
 
-  // ---------- create block by dragging empty space ----------
+  // ---------- calendar interactions ----------
   async _onSelectRange(info) {
     this.calendar.unselect();
-    if (this._creating) return; // ← guard against double-fire
+    if (this._creating) return; // FC can fire select twice
     if (!this.selectedSubtask) {
       this._toast('Select a subtask below first, then drag to schedule it.');
       return;
     }
+
     this._creating = true;
     try {
       const { taskId, subIndex } = this.selectedSubtask;
@@ -335,63 +364,46 @@ export class PlannerView {
       const st = task.subtasks[subIndex];
       if (st.done) return;
 
-      const hours = (info.end - info.start) / 3600000;
+      const hours = (info.end - info.start) / MS_PER_HOUR;
       const block = new TimeBlock({
-        date: this._ymdLocal(info.start),
-        start: this._hhmm(info.start),
+        date: ymdLocal(info.start),
+        start: hhmm(info.start),
         hours: Math.max(0.25, Math.round(hours * 4) / 4),
       });
 
       if (this.gcal.isAuthed && this.gcal.syncEnabled) {
-        const eventId = await this.gcal.createEvent({
+        block.eventId = await this.gcal.createEvent({
           summary: `${task.name}: ${st.name}`,
           description: st.note || '',
           startDate: block.date, startTime: block.start, hours: block.hours,
         });
-        block.eventId = eventId;
-      } else {
-        block.eventId = null; 
       }
 
       this.store.addBlockToSubtask(taskId, subIndex, block);
     } catch (e) {
-      alert('Failed to create: ' + (e.result?.error?.message || e.message));
+      alert('Failed to create: ' + errorMessage(e));
     } finally {
       this._creating = false;
       this._clearClickedBlock();
     }
   }
 
-  // ---------- drag/resize existing block ----------
   async _onEventChanged(info) {
     const p = info.event.extendedProps;
-    if (p.kind !== 'block') { info.revert(); return; }
-    if (!this._isSelected(p.taskId, p.subIndex)) { info.revert(); return; }
-
-    const task = this.store.find(p.taskId);
-    if (!task) { info.revert(); return; }
-    const st = task.subtasks[p.subIndex];
-    if (!st) { info.revert(); return; }
-
-    // find block by eventId (stable)
-    let blockIdx = -1;
-    if (p.eventId) {
-      blockIdx = st.blocks.findIndex((b) => b.eventId === p.eventId);
-    } else {
-      blockIdx = p.blockIndex;
+    const found = p.kind === 'block' && this._isSelected(p.taskId, p.subIndex)
+      ? this._findBlock(p)
+      : null;
+    if (!found) {
+      info.revert();
+      return;
     }
-    if (blockIdx < 0) { info.revert(); return; }
 
-    const block = st.blocks[blockIdx];
-    if (!block) { info.revert(); return; }
+    const { task, st, block } = found;
+    const { start, end } = info.event;
+    block.date = ymdLocal(start);
+    block.start = hhmm(start);
+    block.hours = (end - start) / MS_PER_HOUR;
 
-    const newStart = info.event.start;
-    const newEnd = info.event.end;
-    block.date = this._ymdLocal(newStart);
-    block.start = this._hhmm(newStart);
-    block.hours = (newEnd - newStart) / 3600000;
-
-    // update Google
     if (this.gcal.isAuthed && this.gcal.syncEnabled && block.eventId) {
       try {
         await this.gcal.updateEvent({
@@ -400,7 +412,7 @@ export class PlannerView {
           startDate: block.date, startTime: block.start, hours: block.hours,
         });
       } catch (e) {
-        alert('Failed to update event: ' + (e.result?.error?.message || e.message));
+        alert('Failed to update event: ' + errorMessage(e));
         info.revert();
         return;
       }
@@ -412,53 +424,49 @@ export class PlannerView {
     this._updateCounter();
   }
 
-  // ---------- click block → show delete ✕ ----------
-  // ---------- click block → select subtask, or show ✕ if already selected ----------
+  // Click on the selected subtask's block shows the delete ✕; otherwise it may switch selection.
+  // On desktop, switching to a different task requires a double-click.
   _onEventClick(info) {
     const p = info.event.extendedProps;
-    if (p.kind !== 'block') return;   // never select Google events
-    if (p.done) return;               // done subtasks aren't selectable
+    if (p.kind !== 'block' || p.done) return;
 
-    // Case 1: this block's subtask IS the selected one → show delete ✕
     if (this._isSelected(p.taskId, p.subIndex)) {
-      this._clearClickedBlock();
-      this._clickedBlock = { info, p };
-      const el = info.el;
-      const x = document.createElement('div');
-      x.className = 'block-del-x';
-      x.textContent = '✕';
-      x.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._deleteClickedBlock();
-      });
-      el.appendChild(x);
-      el.classList.add('block-clicked');
+      this._showDeleteButton(info, p);
       return;
     }
 
-    // Case 2: same TASK, different subtask → single-click switches to it
-    if (this.selectedSubtask && p.taskId === this.selectedSubtask.taskId) {
+    const isSameTask = this.selectedSubtask && p.taskId === this.selectedSubtask.taskId;
+    if (!this.selectedSubtask || isSameTask || this.isMobile) {
       this._switchSelection(p.taskId, p.subIndex);
-      return;
     }
+  }
 
-    // Case 3: different task OR nothing selected
-    if (!this.selectedSubtask) {
-      this._switchSelection(p.taskId, p.subIndex); // first selection = easy
-      return;
-    }
+  _onEventDblClick(info) {
+    const p = info.event.extendedProps;
+    if (p.kind !== 'block' || p.done) return;
+    this._switchSelection(p.taskId, p.subIndex);
+  }
 
-    if (this.isMobile) {
-      this._switchSelection(p.taskId, p.subIndex);
-      return;
-    }
+  // ---------- block deletion ----------
+  _showDeleteButton(info, p) {
+    this._clearClickedBlock();
+    this._clickedBlock = { info, p };
+
+    const deleteBtn = document.createElement('div');
+    deleteBtn.className = 'block-del-x';
+    deleteBtn.textContent = '✕';
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._deleteClickedBlock();
+    });
+    info.el.appendChild(deleteBtn);
+    info.el.classList.add('block-clicked');
   }
 
   _clearClickedBlock() {
     if (this._clickedBlock) {
       const el = this._clickedBlock.info.el;
-      const x = el.querySelector('.block-del-x');
-      if (x) x.remove();
+      el.querySelector('.block-del-x')?.remove();
       el.classList.remove('block-clicked');
     }
     this._clickedBlock = null;
@@ -469,119 +477,77 @@ export class PlannerView {
     const { p } = this._clickedBlock;
     this._clickedBlock = null; // clear immediately to prevent double-delete
 
-    const task = this.store.find(p.taskId);
-    if (!task) return;
-    const st = task.subtasks[p.subIndex];
-    if (!st) return;
+    const found = this._findBlock(p);
+    if (!found) return;
+    const { block, blockIndex } = found;
 
-    const blockIdx = p.eventId
-      ? st.blocks.findIndex((b) => b.eventId === p.eventId)
-      : p.blockIndex;
-    if (blockIdx < 0 || blockIdx >= st.blocks.length) return;
-
-    const block = st.blocks[blockIdx];
-    if (!block) return;
-
-    // delete from Google first
     if (this.gcal.isAuthed && block.eventId) {
       try {
         await this.gcal.deleteEvent(block.eventId);
       } catch (e) {
-        console.warn('Google delete failed:', e);
-        // continue to remove locally anyway
+        console.warn('Google delete failed:', e); // still remove locally
       }
     }
 
-    // re-find index (store may have shifted during await) and remove
-    const freshTask = this.store.find(p.taskId);
-    const freshSt = freshTask?.subtasks[p.subIndex];
-    if (freshSt) {
-      const idx = block.eventId
-        ? freshSt.blocks.findIndex((b) => b.eventId === block.eventId)
-        : blockIdx;
-      if (idx >= 0) {
-        freshSt.blocks.splice(idx, 1);
-        this.store.setSubtaskBlocks(p.taskId, p.subIndex, freshSt.blocks);
-      }
-    }
+    // re-resolve: the store may have changed during the await
+    const freshSt = this.store.find(p.taskId)?.subtasks[p.subIndex];
+    if (!freshSt) return;
+    const idx = block.eventId
+      ? freshSt.blocks.findIndex((b) => b.eventId === block.eventId)
+      : blockIndex;
+    if (idx < 0) return;
+    freshSt.blocks.splice(idx, 1);
+    this.store.setSubtaskBlocks(p.taskId, p.subIndex, freshSt.blocks);
   }
 
-  // ---------- double-click → switch selection ----------
-  _onEventDblClick(info) {
-    const p = info.event.extendedProps;
-    if (p.kind !== 'block') return;
-    if (p.done) return;
-    this._switchSelection(p.taskId, p.subIndex);
+  // Locates the block behind a calendar event, preferring the stable eventId over the index.
+  _findBlock(p) {
+    const task = this.store.find(p.taskId);
+    const st = task?.subtasks[p.subIndex];
+    if (!st) return null;
+
+    const blockIndex = p.eventId
+      ? st.blocks.findIndex((b) => b.eventId === p.eventId)
+      : p.blockIndex;
+    const block = st.blocks[blockIndex];
+    if (blockIndex < 0 || !block) return null;
+
+    return { task, st, block, blockIndex };
+  }
+
+  // ---------- due-date highlighting ----------
+  _isDueDate(date) {
+    const st = this._getSelectedSubtask();
+    if (!st || !st.due) return false;
+    const due = parseLocalDate(st.due);
+    return date.getFullYear() === due.getFullYear() &&
+           date.getMonth() === due.getMonth() &&
+           date.getDate() === due.getDate();
+  }
+
+  _highlightDueColumn() {
+    this.calendarEl.querySelectorAll('.due-date-column, .due-date-header')
+      .forEach((el) => el.classList.remove('due-date-column', 'due-date-header'));
+
+    const st = this._getSelectedSubtask();
+    if (!st || !st.due) return;
+
+    // FullCalendar tags day cells with data-date="YYYY-MM-DD", the same format as st.due
+    const dateAttr = `[data-date="${st.due}"]`;
+    this.calendarEl
+      .querySelectorAll(`.fc-timegrid-col${dateAttr}, .fc-day${dateAttr}`)
+      .forEach((el) => el.classList.add('due-date-column'));
+    this.calendarEl
+      .querySelectorAll(`.fc-col-header-cell${dateAttr}`)
+      .forEach((el) => el.classList.add('due-date-header'));
   }
 
   // ---------- backlog ----------
-  async render() {
-    if (!this.isActive || !this.calendar) return;
-    this._renderBacklog();
-    this._updateCounter();
-  }
- 
-  // Returns the earliest block start as a timestamp (ms), or Infinity if no blocks
-  _getSoonestStartTime(st) {
-    let soonest = Infinity;
-    st.blocks.forEach((b) => {
-      if (!b.date || !b.start) return;
-      const [h, m] = b.start.split(':').map(Number);
-      const d = new Date(b.date + 'T00:00:00');
-      d.setHours(h, m, 0, 0);
-      const t = d.getTime();
-      if (t < soonest) soonest = t;
-    });
-    return soonest;
-  }
-
   _renderBacklog() {
-    const cards = [];
-    this.store.getAll().forEach((task) => {
-      task.subtasks.forEach((st, subIndex) => {
-        if (st.done) return;
-
-        const remaining = st.estHoursNum - st.allocatedHours;
-        const fullyScheduled = st.estHoursNum > 0 && remaining <= 0;
-        const isSelected = this._isSelected(task.id, subIndex);
-        const soonestStart = this._getSoonestStartTime(st);
-
-        const wouldBeHidden = this.hideScheduled && fullyScheduled;
-        if (wouldBeHidden && !isSelected) return;
-
-        const isPopped = wouldBeHidden && isSelected;
-
-        cards.push({ task, st, subIndex, remaining, isPopped, soonestStart });
-      });
-    });
-
-    cards.sort((a, b) => {
-      // 1. popped (summoned-but-hidden) cards jump to front
-      const aPop = a.isPopped ? 0 : 1;
-      const bPop = b.isPopped ? 0 : 1;
-      if (aPop !== bPop) return aPop - bPop;
-
-      const aDue = _isDueToday(a.st) ? true : false;
-      const bDue = _isDueToday(b.st) ? true : false;
-      if (aDue !== bDue) return aDue ? -1 : 1;
-
-      // 2. not-fully-allocated (needs time) before fully-allocated
-      const aNeeds = a.remaining > 0 ? 0 : 1;
-      const bNeeds = b.remaining > 0 ? 0 : 1;
-      if (aNeeds !== bNeeds) return aNeeds - bNeeds;
-
-      // 3a. within "needs time" group: more hours remaining first
-      if (aNeeds === 0) {
-        return b.remaining - a.remaining;
-      }
-
-      // 3b. within "fully allocated" group: soonest block start first
-      return a.soonestStart - b.soonestStart;
-    });
+    const cards = this._collectBacklogCards().sort(compareBacklogCards);
 
     if (cards.length === 0) {
-      this.backlogEl.innerHTML =
-        '<div class="backlog-empty">No subtasks to schedule. 🎉</div>';
+      this.backlogEl.innerHTML = '<div class="backlog-empty">No subtasks to schedule. 🎉</div>';
       return;
     }
 
@@ -591,50 +557,44 @@ export class PlannerView {
     );
   }
 
+  // A selected card stays visible ("popped") even when hide-fully-scheduled would hide it.
+  _collectBacklogCards() {
+    const cards = [];
+    this.store.getAll().forEach((task) => {
+      task.subtasks.forEach((st, subIndex) => {
+        if (st.done) return;
+
+        const remaining = st.estHoursNum - st.allocatedHours;
+        const fullyScheduled = st.estHoursNum > 0 && remaining <= 0;
+        const isSelected = this._isSelected(task.id, subIndex);
+        const wouldBeHidden = this.hideScheduled && fullyScheduled;
+        if (wouldBeHidden && !isSelected) return;
+
+        cards.push({
+          task, st, subIndex, remaining,
+          isPopped: wouldBeHidden && isSelected,
+          soonestStart: soonestBlockStart(st),
+        });
+      });
+    });
+    return cards;
+  }
+
   _makeCard(task, st, subIndex) {
+    const isSelected = this._isSelected(task.id, subIndex);
+    const dueToday = _isDueToday(st);
+
     const card = document.createElement('div');
     card.className = 'backlog-card';
     card.style.borderTopColor = task.color;
-    const isSelected = this._isSelected(task.id, subIndex);
     if (isSelected) card.classList.add('selected');
-
-    const dueToday = !st.done && st.due && _isDueToday(st);
     if (dueToday) card.classList.add('due-today');
 
-    const est = st.estHoursNum;
-    const remaining = est - st.allocatedHours;
-    let statusHtml;
-    if (est === 0) statusHtml = `<span class="card-status neutral">${st.allocatedHours}h scheduled</span>`;
-    else if (remaining > 0) statusHtml = `<span class="card-status pending">${remaining}h left</span>`;
-    else statusHtml = `<span class="card-status scheduled">✓ scheduled</span>`;
-
-    const dueHtml = dueToday
-      ? `<span class="card-due due-today-text">⚠️ Due today</span>`
-      : (st.due ? `<span class="card-due">Due ${this._fmtDue(st.due)}</span>` : '');
-
-    // nav arrows (only when selected + has blocks), based on current calendar center
-    let navHtml = '';
-    const blockDays = this._getBlockDays(st);
-
-    if (isSelected && blockDays.length > 0) {
-      const centeredDay = this._getCenteredDay();
-      const hasPrev = blockDays.some((d) => d < centeredDay);
-      const hasNext = blockDays.some((d) => d > centeredDay);
-      const blockCount = st.blocks.filter((b) => b.date && b.start).length;
-
-      navHtml = `
-        <div class="card-nav">
-          <button class="card-nav-arrow" data-nav="prev" ${hasPrev ? '' : 'disabled'}>◀</button>
-          <span class="card-nav-label">${blockCount} block${blockCount === 1 ? '' : 's'}</span>
-          <button class="card-nav-arrow" data-nav="next" ${hasNext ? '' : 'disabled'}>▶</button>
-        </div>`;
-    }
-
     card.innerHTML = `
-      ${navHtml}
-      <div class="card-task" style="color:${task.color};">${this._esc(task.name)}</div>
-      <div class="card-sub">${this._esc(st.name)}</div>
-      <div class="card-meta">${statusHtml}${dueHtml}</div>`;
+      ${isSelected ? this._cardNavHtml(st) : ''}
+      <div class="card-task" style="color:${task.color};">${escapeHtml(task.name)}</div>
+      <div class="card-sub">${escapeHtml(st.name)}</div>
+      <div class="card-meta">${cardStatusHtml(st)}${cardDueHtml(st, dueToday)}</div>`;
 
     card.addEventListener('click', (e) => {
       if (e.target.closest('.card-nav-arrow')) return;
@@ -652,58 +612,59 @@ export class PlannerView {
     return card;
   }
 
+  // Prev/next arrows jump between days that hold this subtask's blocks,
+  // relative to the day at the center of the visible range.
+  _cardNavHtml(st) {
+    const blockDays = getBlockDays(st);
+    if (blockDays.length === 0) return '';
+
+    const centeredDay = this._getCenteredDay();
+    const hasPrev = blockDays.some((d) => d < centeredDay);
+    const hasNext = blockDays.some((d) => d > centeredDay);
+    const blockCount = st.blocks.filter((b) => b.date && b.start).length;
+
+    return `
+        <div class="card-nav">
+          <button class="card-nav-arrow" data-nav="prev" ${hasPrev ? '' : 'disabled'}>◀</button>
+          <span class="card-nav-label">${blockCount} block${blockCount === 1 ? '' : 's'}</span>
+          <button class="card-nav-arrow" data-nav="next" ${hasNext ? '' : 'disabled'}>▶</button>
+        </div>`;
+  }
+
+  // ---------- navigation ----------
   _navigateRelative(st, direction) {
-    const blockDays = this._getBlockDays(st);
+    const blockDays = getBlockDays(st);
     if (blockDays.length === 0) return;
 
     const centeredDay = this._getCenteredDay();
-
-    let targetDay;
-    if (direction === 'next') {
-      targetDay = blockDays.find((d) => d > centeredDay);
-    } else {
-      const earlier = blockDays.filter((d) => d < centeredDay);
-      targetDay = earlier.length ? earlier[earlier.length - 1] : null;
-    }
-
+    const targetDay = direction === 'next'
+      ? blockDays.find((d) => d > centeredDay)
+      : blockDays.filter((d) => d < centeredDay).at(-1);
     if (targetDay == null) return;
 
     this._gotoDateCentered(new Date(targetDay));
     setTimeout(() => this._renderBacklog(), 50);
   }
 
-  // Navigate so the target date is centered in the current view
+  _getCenteredDay() {
+    const { currentStart, currentEnd } = this.calendar.view;
+    const mid = (currentStart.getTime() + currentEnd.getTime()) / 2;
+    return startOfDay(new Date(mid)).getTime();
+  }
+
+  // Week/month views go ~3 days earlier so the target lands mid-range.
   _gotoDateCentered(date) {
     const viewType = this.calendar.view.type;
-
     if (viewType === 'timeGridWeek' || viewType === 'dayGridMonth') {
-      // for week view: go to ~3 days before so the target is mid-week
       const centered = new Date(date);
       centered.setDate(centered.getDate() - 3);
       this.calendar.gotoDate(centered);
     } else {
-      // day view: just go to the date
       this.calendar.gotoDate(date);
     }
   }
 
-  // Optional: flash the target block so you can spot it
-  _flashBlock(block) {
-    setTimeout(() => {
-      const events = this.calendar.getEvents();
-      const target = events.find((ev) => {
-        const p = ev.extendedProps;
-        return p.kind === 'block' &&
-          Math.abs(ev.start.getTime() - this._blockStart(block).getTime()) < 1000;
-      });
-      if (target && target.el) {
-        target.el.classList.add('block-flash');
-        setTimeout(() => target.el.classList.remove('block-flash'), 1000);
-      }
-    }, 100);
-  }
-
-  // ---------- hours counter (in planner toolbar) ----------
+  // ---------- toolbar feedback ----------
   _updateCounter() {
     let el = document.getElementById('plannerCounter');
     if (!el) {
@@ -712,131 +673,87 @@ export class PlannerView {
       el.className = 'planner-counter';
       document.querySelector('.planner-toolbar').appendChild(el);
     }
-    if (!this.selectedSubtask) { el.textContent = ''; return; }
-    const st = this.store.find(this.selectedSubtask.taskId)
-      .subtasks[this.selectedSubtask.subIndex];
-    const est = st.estHoursNum, alloc = st.allocatedHours, left = est - alloc;
+    if (!this.selectedSubtask) {
+      el.textContent = '';
+      return;
+    }
+
+    const st = this.store.find(this.selectedSubtask.taskId).subtasks[this.selectedSubtask.subIndex];
+    const est = st.estHoursNum;
+    const alloc = st.allocatedHours;
+    const left = est - alloc;
     if (est === 0) el.textContent = `${alloc}h scheduled`;
     else if (left <= 0) el.textContent = `✓ ${alloc}h scheduled — done!`;
     else el.textContent = `${est}h needed · ${alloc}h placed · ${left}h left`;
   }
 
   _toast(msg) {
-    let t = document.getElementById('plannerToast');
-    if (!t) {
-      t = document.createElement('div');
-      t.id = 'plannerToast';
-      t.className = 'planner-toast';
-      document.body.appendChild(t);
+    let toast = document.getElementById('plannerToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'plannerToast';
+      toast.className = 'planner-toast';
+      document.body.appendChild(toast);
     }
-    t.textContent = msg;
-    t.classList.add('show');
+    toast.textContent = msg;
+    toast.classList.add('show');
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+    this._toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
   }
+}
 
-  // ---------- helpers ----------
-  
-  _blockStart(b) {
-    const d = new Date(b.date + 'T00:00:00');
-    const [h, m] = b.start.split(':').map(Number);
-    d.setHours(h, m, 0, 0);
-    return d;
-  }
-  _ymdLocal(d) {
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  _hhmm(d) {
-    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  }
-  _fmtDue(ymd) {
-    return new Date(ymd + 'T00:00:00')
-      .toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
-  _esc(s) {
-    return String(s).replace(/[&<>"']/g, (c) =>
-      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  }
+// ---------- backlog ordering & markup ----------
 
-  _bindMobileMenu() {
-    if (this._mobileMenuBound) return;   // bind once
-    this._mobileMenuBound = true;
+// Order: popped → due today → needs time (most remaining first) → fully scheduled (soonest block first)
+function compareBacklogCards(a, b) {
+  if (a.isPopped !== b.isPopped) return a.isPopped ? -1 : 1;
 
-    const btn = document.getElementById('plannerMenuBtn');
-    const panel = document.getElementById('plannerMenuPanel');
-    
-    if (!btn || !panel) return;
-    if (!this._touchResetBound) {
-      this._touchResetBound = true;
-      this.calendarEl.addEventListener('touchend', () => {
-        // give FC a tick, then clear any stuck selection state
-        setTimeout(() => {
-          if (this.calendar) this.calendar.unselect();
-        }, 0);
-      }, { passive: true });
-    }
-    // toggle panel
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (this._clickedBlock && !e.target.closest('.fc-event')) {
-        this._clearClickedBlock();
-      }
-      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
-      this._updateMobileViewButtons();
-    });
+  const aDue = !!_isDueToday(a.st);
+  const bDue = !!_isDueToday(b.st);
+  if (aDue !== bDue) return aDue ? -1 : 1;
 
-    // close when tapping outside
-    document.addEventListener('click', (e) => {
-      if (panel.style.display !== 'none' &&
-          !panel.contains(e.target) && e.target !== btn) {
-        panel.style.display = 'none';
-      }
-    });
+  const aNeeds = a.remaining > 0;
+  const bNeeds = b.remaining > 0;
+  if (aNeeds !== bNeeds) return aNeeds ? -1 : 1;
 
-    // day navigation
-    document.getElementById('plannerPrevDay')?.addEventListener('click', () => this.calendar.prev());
-    document.getElementById('plannerTodayBtn')?.addEventListener('click', () => this.calendar.today());
-    document.getElementById('plannerNextDay')?.addEventListener('click', () => this.calendar.next());
-    
-    // view switcher
-    panel.querySelectorAll('.pm-views button').forEach((vb) => {
-      vb.addEventListener('click', () => {
-        this.calendar.changeView(vb.dataset.view);
-        this._updateMobileViewButtons();
-      });
-    });
+  return aNeeds ? b.remaining - a.remaining : a.soonestStart - b.soonestStart;
+}
 
-    // refresh (reuse the same reconcile path as desktop refresh)
-    document.getElementById('pmRefresh').addEventListener('click', () => {
-      document.getElementById('plannerRefreshBtn')?.click();  // triggers app._reconcile()
-      panel.style.display = 'none';
-    });
+function cardStatusHtml(st) {
+  const est = st.estHoursNum;
+  const remaining = est - st.allocatedHours;
+  if (est === 0) return `<span class="card-status neutral">${st.allocatedHours}h scheduled</span>`;
+  if (remaining > 0) return `<span class="card-status pending">${remaining}h left</span>`;
+  return `<span class="card-status scheduled">✓ scheduled</span>`;
+}
 
-    // hide-fully-scheduled (mobile) — sync with desktop checkbox + state
-    const mobileHide = document.getElementById('hideScheduledMobile');
-    if (mobileHide) {
-      mobileHide.checked = this.hideScheduled;
-      mobileHide.addEventListener('change', () => {
-        this.hideScheduled = mobileHide.checked;
-        const desktopHide = document.getElementById('hideScheduled');
-        if (desktopHide) desktopHide.checked = this.hideScheduled;
-        this._renderBacklog();
-      });
-    }
-  }
+function cardDueHtml(st, dueToday) {
+  if (dueToday) return `<span class="card-due due-today-text">⚠️ Due today</span>`;
+  return st.due ? `<span class="card-due">Due ${fmtShortDate(parseLocalDate(st.due))}</span>` : '';
+}
 
-  _updateMobileViewButtons() {
-    const panel = document.getElementById('plannerMenuPanel');
-    if (!panel) return;
-    const current = this.calendar?.view?.type;
-    panel.querySelectorAll('.pm-views button').forEach((vb) => {
-      vb.classList.toggle('active', vb.dataset.view === current);
-    });
-  }
+// ---------- block/date helpers ----------
+function isMobileWidth() {
+  return window.innerWidth < MOBILE_BREAKPOINT_PX;
+}
 
-  _applyMobilePlannerUI() {
-    // placeholder hook for anything that must change when crossing the breakpoint.
-    // (the CSS handles show/hide; this is here so the resize handler can call it)
-    this._updateMobileViewButtons();
-  }
+// Earliest scheduled block start in ms, or Infinity if none.
+function soonestBlockStart(st) {
+  return st.blocks
+    .filter((b) => b.date && b.start)
+    .map((b) => parseLocalDateTime(b.date, b.start).getTime())
+    .reduce((soonest, t) => (t < soonest ? t : soonest), Infinity);
+}
+
+// Sorted, de-duplicated day timestamps (local midnight) that hold the subtask's blocks.
+function getBlockDays(st) {
+  const days = new Set();
+  st.blocks.forEach((b) => {
+    if (b.date) days.add(startOfDay(parseLocalDate(b.date)).getTime());
+  });
+  return [...days].sort((a, b) => a - b);
+}
+
+function errorMessage(e) {
+  return e.result?.error?.message || e.message;
 }

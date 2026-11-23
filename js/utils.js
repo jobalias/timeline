@@ -1,20 +1,4 @@
-export function startOfDay(d) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-export function ymd(d) {
-  return startOfDay(d).toISOString().slice(0, 10);
-}
-
-export function parseYmd(s) {
-  return s ? startOfDay(new Date(s + 'T00:00:00')) : null;
-}
-
-export function sameDay(a, b) {
-  return ymd(a) === ymd(b);
-}
+import { parseLocalDate } from './core/dates.js';
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
@@ -22,28 +6,24 @@ export function escapeHtml(s) {
   );
 }
 
+// True when the subtask isn't done and its due date's year, month and day
+// are each <= today's (compared independently, not as a whole date).
 export function _isDueToday(st) {
-  if (st.done || !st.due) {
-    return false;
-  }
+  if (st.done || !st.due) return false;
   const today = new Date();
-  const due = new Date(st.due + 'T00:00:00');
-  if (due.getFullYear() > today.getFullYear()) return false;
-  if (due.getMonth() > today.getMonth()) return false;
-  if (due.getDate() > today.getDate()) return false;
-  return true;
+  const due = parseLocalDate(st.due);
+  return due.getFullYear() <= today.getFullYear()
+    && due.getMonth() <= today.getMonth()
+    && due.getDate() <= today.getDate();
 }
 
-  // Returns the soonest due date among a task's subtasks as a Date object,
-  // or null if no subtasks have due dates
+// Soonest due date among a task's incomplete subtasks, or null if none have one.
 export function _getSoonestDueDate(task) {
   let soonest = null;
-  task.subtasks.forEach((st) => {
-    if (!st.due || st.done) return;
-    const d = new Date(st.due + 'T00:00:00');
-    if (soonest === null || d < soonest) {
-      soonest = d;
-    }
-  });
+  for (const st of task.subtasks) {
+    if (!st.due || st.done) continue;
+    const d = parseLocalDate(st.due);
+    if (soonest === null || d < soonest) soonest = d;
+  }
   return soonest;
 }
