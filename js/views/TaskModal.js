@@ -7,12 +7,13 @@ import { Modal } from '../core/Modal.js';
 const normalizeName = (name) => name.trim().toLowerCase();
 
 export class TaskModal extends Modal {
-  constructor(store, googleCalendar, deleteDialog, { onAfterSave = () => {} } = {}) {
+  constructor(store, googleCalendar, deleteDialog, { onAfterSave = () => {}, onNoteChanged = () => {} } = {}) {
     super('taskModalBackdrop');
     this.store = store;
     this.gcal = googleCalendar;
     this.deleteDialog = deleteDialog;
     this.onAfterSave = onAfterSave;
+    this.onNoteChanged = onNoteChanged;   // ({ type: 'subtask', taskId, subIndex, note }) for edited notes
     this.editingId = null;
     this._afterSaveOnce = null;
     this._pendingEventDeletions = [];   // [{ subtask, scope }] — executed on Save, dropped on cancel
@@ -117,10 +118,23 @@ export class TaskModal extends Modal {
         <div class="field"><label>Est. hours</label>
           <input type="number" min="0" step="0.5" placeholder="e.g. 6"
             value="${data.estHours || ''}"></div>
-      </div>`;
+      </div>
+      <button class="st-note-toggle" type="button">📝 Add note</button>
+      <textarea class="st-note" rows="3" placeholder="Note for this subtask…"
+        hidden>${data.note ? escapeHtml(data.note) : ''}</textarea>`;
 
     row.querySelector('.del-btn').addEventListener('click', () => this._removeSubtaskRow(row));
+    row.querySelector('.st-note-toggle').addEventListener('click', () => this._showNote(row));
+    if (data.note) this._showNote(row, { focus: false });
     this.subtaskList.appendChild(row);
+  }
+
+  // reveal a row's note box (the toggle button disappears once it's open)
+  _showNote(row, { focus = true } = {}) {
+    const note = row.querySelector('.st-note');
+    note.hidden = false;
+    row.querySelector('.st-note-toggle').hidden = true;
+    if (focus) note.focus();
   }
 
   async _removeSubtaskRow(row) {
@@ -189,6 +203,7 @@ export class TaskModal extends Modal {
         name: stName,
         due: dueInput.value,
         estHours: hoursInput.value,
+        note: row.querySelector('.st-note').value,
       });
       subtasks.push(st);
       if (row.dataset.wbId) wbLinks.push({ wbId: row.dataset.wbId, subtaskId: st.id });
@@ -198,12 +213,15 @@ export class TaskModal extends Modal {
 
   _saveEdit(name, subtasks) {
     const savedId = this.editingId;
-    const previousIds = new Set(this.store.find(savedId).subtasks.map((s) => s.id));
+    const previousNotes = new Map(this.store.find(savedId).subtasks.map((s) => [s.id, s.note || '']));
     this.store.update(savedId, { name, subtasks });
 
     const newSubtaskIndices = [];
     this.store.find(savedId).subtasks.forEach((s, i) => {
-      if (!previousIds.has(s.id)) newSubtaskIndices.push(i);
+      if (!previousNotes.has(s.id)) newSubtaskIndices.push(i);
+      else if (previousNotes.get(s.id) !== s.note) {
+        this.onNoteChanged({ type: 'subtask', taskId: savedId, subIndex: i, note: s.note });
+      }
     });
     return { savedId, newSubtaskIndices };
   }

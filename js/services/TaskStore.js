@@ -89,8 +89,7 @@ export class TaskStore {
       if (old.blocks.length) ns.blocks = old.blocks;
       ns.done = old.done;
       ns.actualHours = old.actualHours;
-      ns.note = old.note;
-      ns.waiting = old.waiting;
+      ns.waiting = old.waiting;   // note comes from the editor, so it isn't carried over
       if (old.name !== ns.name) {
         renamedSubtasks.push({ subtask: ns, oldName: old.name, newName: ns.name });
       }

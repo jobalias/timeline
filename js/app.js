@@ -61,6 +61,7 @@ class App {
 
     this.taskModal = new TaskModal(this.store, this.gcal, this.deleteDialog, {
       onAfterSave: (taskId, newSubtaskIndices) => this.scheduling.start(taskId, newSubtaskIndices),
+      onNoteChanged: (saved) => this.taskActions.syncNoteToCalendar(saved),
     });
     this.whiteboardView = new WhiteboardView(this.store, this.taskModal);
     this.undoControls = new UndoControls(this.store);

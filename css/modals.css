@@ -69,6 +69,41 @@
 }
 #addSubtaskBtn { margin-top: 10px; }
 
+/* Optional per-subtask note */
+.st-note-toggle {
+  margin-top: 8px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+.st-note-toggle:hover {
+  transform: none;
+  box-shadow: none;
+  color: var(--accent);
+}
+.st-note {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.st-note:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.st-note[hidden],
+.st-note-toggle[hidden] { display: none; }
+
 /* ---- Note editor ---- */
 #noteContext {
   color: var(--muted);
