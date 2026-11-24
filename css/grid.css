@@ -368,6 +368,33 @@ th, td {
   accent-color: var(--accent);
   margin: 0;
 }
+.show-completed-mini .scm-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.show-completed-mini .scm-clear {
+  margin-left: 3px;
+  padding: 0 0 0 8px;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: inherit;
+  font-weight: 500;
+  color: var(--muted);
+}
+.show-completed-mini .scm-clear:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border);
+  color: var(--danger);
+}
 
 /* ============================================================
    Small screens (≤600px) — tighter desktop table

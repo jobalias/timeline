@@ -113,6 +113,10 @@ class App {
         this.grid.render();
       },
     });
+
+    for (const id of ['clearCompletedBtn', 'clearCompletedSettingBtn']) {
+      document.getElementById(id).addEventListener('click', () => this.taskActions.clearCompleted());
+    }
   }
 
   // ==================== Login / Auth ====================

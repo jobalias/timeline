@@ -65,6 +65,34 @@ export class TaskActions {
     return false;
   }
 
+  // ==================== Clear completed ====================
+  async clearCompleted() {
+    const { subtasks, tasks } = this.store.countCompleted();
+    if (subtasks === 0 && tasks === 0) {
+      alert('Nothing completed to clear.');
+      return;
+    }
+
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const parts = [];
+    if (subtasks) parts.push(`${plural(subtasks, 'completed subtask')} in unfinished tasks`);
+    if (tasks) parts.push(`${plural(tasks, 'fully completed task')}`);
+
+    const choice = await this.deleteDialog.open({
+      title: 'Clear completed?',
+      message: `You have ${parts.join(' and ')}. Your Progress history stays, and you can undo this.`,
+      labels: {
+        none: `✂️ Clear completed subtasks only${tasks ? ' (keep finished tasks)' : ''}`,
+        all: '🗑 Clear completed tasks AND subtasks',
+        cancel: 'Cancel',
+      },
+      hide: ['future', ...(subtasks ? [] : ['none']), ...(tasks ? [] : ['all'])],
+    });
+    if (choice === 'cancel') return;
+
+    this.store.clearCompleted({ includeTasks: choice === 'all' });
+  }
+
   // silently remove a task whose creation was cancelled mid-scheduling
   async discardTask(taskId) {
     const task = this.store.find(taskId);

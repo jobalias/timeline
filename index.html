@@ -125,9 +125,11 @@
       <div class="main-split">
         <div class="grid-col">
           <div class="grid-wrap" id="gridWrap"></div>
-          <label class="show-completed-mini" id="showCompletedLabel">
-            <input type="checkbox" id="showCompleted"> Show completed
-          </label>
+          <div class="show-completed-mini" id="showCompletedLabel">
+            <label class="scm-toggle"><input type="checkbox" id="showCompleted"> Show completed</label>
+            <button class="scm-clear" id="clearCompletedBtn" type="button"
+                    title="Remove completed subtasks, or completed tasks and subtasks">Clear completed…</button>
+          </div>
         </div>
 
         <aside class="day-view" id="dayView">
@@ -272,6 +274,14 @@
           <input type="checkbox" id="showCompletedSetting">
           <span class="switch-slider"></span>
         </label>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <div class="settings-row-title">Clear completed</div>
+          <div class="settings-row-desc">Remove finished subtasks, or finished tasks too. Progress history is kept.</div>
+        </div>
+        <button id="clearCompletedSettingBtn" type="button">Clear…</button>
       </div>
 
       <div class="settings-section">

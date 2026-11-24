@@ -117,6 +117,33 @@ export class TaskStore {
     this.save();
   }
 
+  // How much "Clear completed" would remove:
+  //   subtasks — done subtasks inside tasks that still have work left (or Always tasks)
+  //   tasks    — fully completed tasks (Always tasks are never counted)
+  countCompleted() {
+    let subtasks = 0, tasks = 0;
+    for (const t of this.tasks) {
+      if (this._isFinished(t)) tasks++;
+      else subtasks += t.subtasks.filter((s) => s.done).length;
+    }
+    return { subtasks, tasks };
+  }
+
+  // Removes done subtasks from unfinished tasks; with includeTasks, also removes
+  // fully completed tasks. Finished tasks are otherwise left intact, and the
+  // Progress history (completion log) and calendar events are never touched.
+  clearCompleted({ includeTasks = false } = {}) {
+    if (includeTasks) this.tasks = this.tasks.filter((t) => !this._isFinished(t));
+    for (const t of this.tasks) {
+      if (!this._isFinished(t)) t.subtasks = t.subtasks.filter((s) => !s.done);
+    }
+    this.save();
+  }
+
+  _isFinished(task) {
+    return !task.persistent && task.subtasks.length > 0 && task.subtasks.every((s) => s.done);
+  }
+
   // 'always' tasks stay on the list even when every subtask is done
   setPersistent(taskId, persistent) {
     const t = this.find(taskId);
